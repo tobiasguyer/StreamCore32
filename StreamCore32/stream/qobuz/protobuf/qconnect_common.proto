@@ -1,0 +1,119 @@
+syntax = "proto2";
+package qconnect;
+
+import "nanopb.proto";
+
+// ===== Enums used across messages =====
+enum BufferState {
+  BUFFER_STATE_UNKNOWN   = 0;
+  BUFFER_STATE_BUFFERING = 1;
+  BUFFER_STATE_OK        = 2;
+  BUFFER_STATE_ERROR     = 3;
+  BUFFER_STATE_UNDERRUN  = 4;
+}
+
+enum PlayingState {
+  PLAYING_STATE_UNKNOWN  = 0;
+  PLAYING_STATE_STOPPED  = 1;
+  PLAYING_STATE_PLAYING  = 2;
+  PLAYING_STATE_PAUSED   = 3;
+}
+
+enum DeviceType {
+  DEVICE_TYPE_UNKNOWN     = 0;
+  DEVICE_TYPE_SPEAKER    = 1;
+  DEVICE_TYPE_SPEAKERBOX  = 2; //FILLED?
+  DEVICE_TYPE_TV          = 3; //DISPLAY?
+  DEVICE_TYPE_SPEAKERBOX2 = 4; 
+  DEVICE_TYPE_LAPTOP      = 5;
+  DEVICE_TYPE_PHONE       = 6;
+  DEVICE_TYPE_GOOGLE_CAST = 7;
+  DEVICE_TYPE_HEADPHONES  = 8;
+  DEVICE_TYPE_TABLET      = 9;
+
+}
+
+enum LoopMode {
+  LOOP_MODE_UNKNOWN    = 0;
+  LOOP_MODE_OFF        = 1;
+  LOOP_MODE_REPEAT_ONE = 2;
+  LOOP_MODE_REPEAT_ALL = 3;
+}
+
+// ===== Small leaves =====
+message QueueVersion { // Bt
+  optional uint64 major = 1;
+  optional int32 minor = 2;
+}
+
+message Position { // zt
+  optional fixed64 timestamp = 1; // ms epoch (fixed64 on wire)
+  optional uint32  value     = 2; // ms position
+}
+
+message Error { // Lt
+  optional string code    = 1 [(nanopb).type = FT_POINTER];
+  optional string message = 2 [(nanopb).type = FT_POINTER];
+}
+
+message Authenticate_message { // Nt
+  optional string token = 1 [(nanopb).type = FT_POINTER];
+}
+
+message PlaybackError { // Dt
+  optional QueueVersion queueVersion = 1;
+  optional int32        queueItemId  = 2;
+  optional int32        errorType    = 3; // keep numeric; app maps enum
+}
+
+// ===== Device / renderer =====
+message DeviceCapabilities { // jt
+  optional int32 minAudioQuality     = 1;
+  optional int32 maxAudioQuality     = 2;
+  optional int32 volumeRemoteControl = 3; // numeric enum in bundle
+}
+
+message DeviceInfo { // Ut
+  optional bytes  deviceUuid     = 1 [(nanopb).type = FT_POINTER]; // 16 bytes
+  optional string friendlyName   = 2 [(nanopb).type = FT_POINTER];
+  optional string brand          = 3 [(nanopb).type = FT_POINTER];
+  optional string model          = 4 [(nanopb).type = FT_POINTER];
+  optional string serialNumber   = 5;
+  optional DeviceType type           = 6; // numeric enum
+  optional DeviceCapabilities capabilities = 7;
+  optional string softwareVersion = 8 [(nanopb).type = FT_POINTER];
+}
+
+message RendererState { // qn
+  optional PlayingState playingState      = 1;
+  optional BufferState  bufferState       = 2;
+  optional Position     currentPosition   = 3;
+  optional uint32       duration          = 4; // ms
+  optional uint32        currentQueueIndex = 5;
+  //optional QueueVersion queueVersion      = 5;
+  //optional int32        currentQueueItemId = 6;
+  optional int32        nextQueueItemId    = 7;
+}
+message QueueRendererState { // qn
+  optional PlayingState playingState      = 1;
+  optional BufferState  bufferState       = 2;
+  optional Position     currentPosition   = 3;
+  optional uint32       duration          = 4; // ms
+  optional QueueVersion queueVersion      = 5;
+  optional int32        currentQueueItemId = 6;
+  optional int32        nextQueueItemId    = 7;
+}
+
+// ===== Queue item references =====
+message QueueItemRef { // Zt
+  optional QueueVersion queueVersion = 1;
+  optional uint32        id           = 2;
+}
+
+// Track WITH context (snapshots/autoplay) — Ht
+message QueueTrackRef {
+  optional uint64  queueItemId  = 1;
+  optional fixed32 trackId     = 2;
+  optional bytes   contextUuid = 3 [(nanopb).type = FT_POINTER]; // 16 bytes
+}
+

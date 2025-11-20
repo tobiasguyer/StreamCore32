@@ -1,0 +1,170 @@
+syntax = "proto2";
+package qconnect;
+import "nanopb.proto";
+import "qconnect_common.proto";
+
+// ===== Server → Controllers: full state & deltas =====
+
+// Full snapshot — Vr
+message SrvrCtrlQueueState {
+  optional QueueVersion          queueVersion          = 1;
+  optional bytes                 actionUuid            = 2 [(nanopb).type = FT_POINTER]; // 16b
+  repeated QueueTrackRef         tracks                = 3 [(nanopb).type = FT_POINTER];
+  optional bool                  shuffleMode           = 4;
+  repeated uint32                shuffledTrackIndexes  = 5 [(nanopb).type = FT_POINTER];
+  optional bool                  autoplayMode          = 6;
+  optional bool                  autoplayLoading       = 7;
+  repeated QueueTrackRef         autoplayTracks        = 8 [(nanopb).type = FT_POINTER];
+  optional bytes                 queueHash             = 100; // raw bytes
+}
+
+// Insert after a given item — on
+message SrvrCtrlQueueTracksInserted {
+  optional QueueVersion  queueVersion   = 1;
+  optional bytes         actionUuid     = 2 [(nanopb).type = FT_POINTER];
+  repeated QueueTrackRef tracks         = 3 [(nanopb).type = FT_POINTER];
+  optional int32         insertAfter    = 4;
+  optional fixed32       shuffleSeed    = 5;
+  optional bytes         contextUuid    = 6 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayReset  = 7;
+  optional bool          autoplayLoading= 8;
+  optional bytes         queueHash      = 100;
+}
+
+// Add (usually append) — rn
+message SrvrCtrlQueueTracksAdded {
+  optional QueueVersion  queueVersion   = 1;
+  optional bytes         actionUuid     = 2 [(nanopb).type = FT_POINTER];
+  repeated QueueTrackRef tracks         = 3 [(nanopb).type = FT_POINTER];
+  optional fixed32       shuffleSeed    = 4;
+  optional bytes         contextUuid    = 5 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayReset  = 6;
+  optional bool          autoplayLoading= 7;
+  optional bytes         queueHash      = 100;
+}
+
+// Remove by ids — en
+message SrvrCtrlQueueTracksRemoved {
+  optional QueueVersion  queueVersion = 1;
+  optional bytes         actionUuid   = 2 [(nanopb).type = FT_POINTER];
+  repeated uint32         queueItemIds = 3 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayReset   = 4;
+  optional bool          autoplayLoading = 5;
+  optional bytes         queueHash    = 100;
+}
+
+// Reorder selected ids after anchor — Xr
+message SrvrCtrlQueueTracksReordered {
+  optional QueueVersion  queueVersion = 1;
+  optional bytes         actionUuid   = 2 [(nanopb).type = FT_POINTER];
+  repeated uint32         queueItemIds = 3 [(nanopb).type = FT_POINTER];
+  optional uint32         insertAfter  = 4;
+  optional bool          autoplayReset   = 5;
+  optional bool          autoplayLoading = 6;
+  optional bytes         queueHash    = 100;
+}
+
+// Cleared — Qr
+message SrvrCtrlQueueCleared {
+  optional QueueVersion  queueVersion = 1;
+  optional bytes         actionUuid   = 2 [(nanopb).type = FT_POINTER];
+}
+
+// ===== Controller → Server queue commands (mirror shapes) =====
+
+message CtrlSrvrClearQueue {
+  optional QueueVersion queueVersion = 1;
+}
+
+message CtrlSrvrQueueLoadTracks {
+  optional QueueVersion  queueVersion            = 1;
+  optional bytes         actionUuid              = 2 [(nanopb).type = FT_POINTER];
+  optional bytes         sessionUuid             = 3 [(nanopb).type = FT_POINTER]; // 16b
+  optional uint32        queuePosition           = 4;
+  optional fixed32       qobuzReferenceUuid      = 5;
+  optional int32         shufflePivotQueueItemId = 6;
+  optional bool          shuffleMode             = 7;
+  optional bytes         contextUuid             = 8 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayReset           = 9;
+  optional bool          autoplayLoading         = 10;
+  optional bytes         queueHash               = 100;
+}
+
+message SrvrCtrlQueueLoadTracks {
+  optional QueueVersion  queueVersion            = 1;
+  optional bytes         actionUuid              = 2 [(nanopb).type = FT_POINTER];
+  repeated QueueTrackRef tracks                  = 3 [(nanopb).type = FT_POINTER];
+  optional uint32        queuePosition           = 4;
+  optional fixed32       qobuzReferenceUuid      = 5;
+  optional int32         shufflePivotQueueItemId = 6;
+  optional bool          shuffleMode             = 7;
+  optional bytes         contextUuid             = 8 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayReset           = 9;
+  optional bool          autoplayLoading         = 10;
+  optional bytes         queueHash               = 100;
+}
+
+message CtrlSrvrQueueInsertTracks {
+  optional QueueVersion  queueVersion   = 1;
+  optional bytes         actionUuid     = 2 [(nanopb).type = FT_POINTER];
+  repeated QueueTrackRef tracks         = 3;
+  optional int32         insertAfter    = 4;
+  optional fixed32       shuffleSeed    = 5;
+  optional bytes         contextUuid    = 6 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayReset  = 7;
+  optional bool          autoplayLoading= 8;
+  optional bytes         queueHash      = 100;
+}
+
+message CtrlSrvrQueueAddTracks {
+  optional QueueVersion  queueVersion   = 1;
+  optional bytes         actionUuid     = 2 [(nanopb).type = FT_POINTER];
+  repeated QueueTrackRef tracks         = 3;
+  optional fixed32       shuffleSeed    = 4;
+  optional bytes         contextUuid    = 5 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayReset  = 6;
+  optional bool          autoplayLoading= 7;
+  optional bytes         queueHash      = 100;
+}
+
+message CtrlSrvrQueueRemoveTracks {
+  optional QueueVersion  queueVersion = 1;
+  optional bytes         actionUuid   = 2 [(nanopb).type = FT_POINTER];
+  repeated int32         queueItemIds = 3 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayReset   = 4;
+  optional bool          autoplayLoading = 5;
+  optional bytes         queueHash    = 100;
+}
+
+message CtrlSrvrQueueReorderTracks {
+  optional QueueVersion  queueVersion = 1;
+  optional bytes         actionUuid   = 2 [(nanopb).type = FT_POINTER];
+  repeated int32         queueItemIds = 3 [(nanopb).type = FT_POINTER];
+  optional int32         insertAfter  = 4;
+  optional bool          autoplayReset   = 5;
+  optional bool          autoplayLoading = 6;
+  optional bytes         queueHash    = 100;
+}
+message CtrlSrvrAutoplayLoadTracks {
+  optional QueueVersion  queueVersion = 1;
+  optional bytes         actionUuid   = 2 [(nanopb).type = FT_POINTER];
+  repeated fixed32       trackIds = 3 [(nanopb).type = FT_POINTER];
+  optional bytes         contextUuid  = 4 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayLoading = 5;
+  optional bool          autoplayReset   = 6;
+  optional uint32        shuffleSeed  = 7;
+  optional uint32        insertAfter  = 8;
+  optional bool          prepend      = 9;
+  optional bool          append       = 10;
+  optional bytes         queueHash    = 100;
+}
+message CtrlSrvrAutoplayLoadTracks_old {
+  optional QueueVersion  queueVersion = 1;
+  repeated QueueTrackRef tracks       = 2 [(nanopb).type = FT_POINTER];
+  optional uint32        insertAfter  = 3;
+  optional bytes         contextUuid  = 4 [(nanopb).type = FT_POINTER];
+  optional bool          autoplayLoading = 5;
+  optional bool          autoplayReset   = 6;
+  optional uint32        shuffleSeed  = 7;
+  optional bytes         queueHash    = 100;
+}

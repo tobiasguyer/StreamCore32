@@ -1,0 +1,12 @@
+syntax = "proto2";
+
+package player.proto.transfer;
+
+import "protobuf/context_track.proto";
+
+//option optimize_for = CODE_SIZE;
+
+message Queue {
+    repeated ContextTrack tracks = 1;
+    optional bool is_playing_queue = 2;
+}

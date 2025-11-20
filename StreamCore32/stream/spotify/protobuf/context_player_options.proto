@@ -1,0 +1,18 @@
+syntax = "proto2";
+
+
+import "nanopb.proto";
+
+package player.proto;
+
+import "protobuf/utils.proto";
+
+//option optimize_for = CODE_SIZE;
+
+
+message ContextPlayerOptions {
+    optional bool shuffling_context = 1;
+    optional bool repeating_context = 2;
+    optional bool repeating_track = 3;
+    repeated MetadataEntry  context_enhancement = 5 [(nanopb).type = FT_POINTER];   
+}

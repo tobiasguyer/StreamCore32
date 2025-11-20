@@ -1,0 +1,47 @@
+// A minimal set of protobuf messages required to auth through login5, with a stored credential.
+syntax = "proto2";
+
+import "nanopb.proto";
+import "protobuf/credentials.proto";
+
+message ClientInfo {
+  required string client_id = 1 [(nanopb).type = FT_POINTER];
+  required string device_id = 2 [(nanopb).type = FT_POINTER];
+}
+
+message LoginRequest {
+    required ClientInfo client_info = 1;
+    
+    oneof login_method {
+        //ChallengeSolutions challenge_solutions = 3;
+        StoredCredential stored_credential = 100;
+        Password password = 101;
+        FacebookAccessToken facebook_access_token = 102;
+        OneTimeToken one_time_token = 104;
+        AppleSignInCredential apple_sign_in_credential = 106;        
+    }
+}
+
+message LoginOk {
+    required string access_token = 2 [(nanopb).type = FT_POINTER];
+    optional int32 access_token_expires_in = 4;
+}
+
+message LoginResponse {
+    oneof response {
+        LoginOk ok = 1;
+        LoginError error = 2;
+    }
+}
+
+enum LoginError {
+    UNKNOWN_ERROR = 0;
+    INVALID_CREDENTIALS = 1;
+    BAD_REQUEST = 2;
+    UNSUPPORTED_LOGIN_PROTOCOL = 3;
+    TIMEOUT = 4;
+    UNKNOWN_IDENTIFIER = 5;
+    TOO_MANY_ATTEMPTS = 6;
+    INVALID_PHONENUMBER = 7;
+    TRY_AGAIN_LATER = 8;
+}

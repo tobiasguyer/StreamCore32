@@ -1,0 +1,16 @@
+syntax = "proto2";
+
+package player.proto.transfer;
+
+import "protobuf/context.proto";
+import "protobuf/context_player_options.proto";
+import "protobuf/play_origin.proto";
+
+//option optimize_for = CODE_SIZE;
+
+message Session {
+    optional PlayOrigin play_origin = 1;
+    optional Context context = 2;
+    optional string current_uid = 3;
+    optional ContextPlayerOptions option_overrides = 4;
+}

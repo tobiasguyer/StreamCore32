@@ -1,0 +1,13 @@
+import "nanopb.proto";
+message Header {
+    optional string uri = 0x01 [(nanopb).type = FT_POINTER];
+    optional string content_type = 0x02 [(nanopb).type = FT_POINTER];
+    optional string method = 0x03 [(nanopb).type = FT_POINTER];
+    optional int32 status_code = 0x04;
+    repeated UserField user_fields = 0x06;
+}
+
+message UserField {
+    optional string key = 0x01 [(nanopb).type = FT_POINTER];
+    optional string value = 0x02 [(nanopb).type = FT_POINTER];
+}

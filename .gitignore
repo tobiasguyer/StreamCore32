@@ -1,0 +1,12 @@
+.cache/
+.DS_Store
+__pycache__/
+build/
+build*/
+wiki/
+py/
+result/
+authBlob.json
+config.json
+targets/esp32/sdkconfig.streamcore32-wrover-b
+*.bak

@@ -1,0 +1,93 @@
+syntax = "proto2";
+import "nanopb.proto";
+
+
+message WSWelcome { // (0x01)
+  optional uint64 ws_request_id = 1; // correlates with request id
+  optional uint64 timestamp     = 2;
+  optional bytes  jwt           = 3 [(nanopb).type = FT_POINTER];
+}
+
+message WSInfo { // (0x02)
+  optional uint64 ws_request_id = 1; // matches your "1: 3" example
+  optional uint64 timestamp     = 2; // 1758991789028 in your sample
+  optional bool   unknown1      = 3; // was varint=1; treat as bool until proven otherwise
+  optional bytes  unknown2      = 5 [(nanopb).type = FT_POINTER]; // "\x02" in your sample
+  optional WSData ws_data       = 7; // nested submessage
+}
+
+message WSData {
+  // From your bytes: tag 1 is a 64-bit fixed field (not varint).
+  // You printed it as a double as well — same bits. Treat as fixed64 ID.
+  optional fixed64 device_id = 1; // 0x000001998c14abe4 in sample
+
+  optional uint64   message_id      = 2; // just a guess, but ws_request_id 4 references 2(message_id) i guess...
+
+  // The "Info" blob: starts with kind=61, then a tag 61 submessage.
+  optional Info   info       = 3;
+
+  message Info {
+    // Carry an explicit kind. In your capture this was "61".
+    enum Kind {
+      KIND_UNKNOWN = 0;
+      KIND_PLAY =29;
+      KIND_DEVICE  = 61; // matches observed kind=61
+      KIND_PLAYING = 63;
+      KIND_STATUS  = 77;
+      // Reserve space for future kinds you may discover.
+      // e.g. KIND_SESSION=62; KIND_ACCOUNT=63; etc.
+    }
+
+    optional uint32 kind = 1; // set to a value from Kind (61 in your sample)
+
+    // IMPORTANT: The wire actually put a message under tag 61,
+    // and *inside that*, the real details are at tag 2.
+    // To mirror the wire exactly, model the tag 61 wrapper as "ClientBlock".
+    oneof data {
+      empty_message play_block = 29;
+      ClientBlock device_block = 61; // matches wire: tag 61 → submessage
+      StatusBlock playing_for = 63;
+      StatusBlock active_for = 77;
+      // Add more oneof arms later if you see other tag numbers:
+      // AnotherBlock other_block = 62;
+    }
+  }
+}
+message empty_message {
+
+}
+message StatusBlock{
+ optional uint64 timestamp_ms = 1;
+}
+/* -------- Wrapper that actually sits at Info tag 61 --------
+   Your hex shows: Info.61 (wire-type=2, len=64) and inside it
+   only tag 2 is present and holds the details. */
+message ClientBlock {
+  // Only tag 2 was present in the sample.
+  optional DeviceInfo details = 2;
+}
+
+/* -------- The actual “details” you care about (Info.61.2.*) -------- */
+
+message DeviceInfo {
+  // tag 1: 16 opaque bytes: 20 65 13 51 31 64 43 2c 84 cd 0d 02 66 6e 3f e2
+  optional bytes  opaque_id    = 1 [(nanopb).type = FT_POINTER];
+
+  // tag 2: "Web Player Chrome"
+  optional string name         = 2 [(nanopb).type = FT_POINTER];
+
+  // tag 6: 5  (very likely an enum; keep as uint32 for now)
+  optional uint32 platform     = 6;
+
+  // tag 7: length-delimited with three small varints: {1=1,2=4,3=2}
+  optional Capabilities caps   = 7;
+
+  // tag 8: "wp-8.1.0-b019"
+  optional string app_version  = 8 [(nanopb).type = FT_POINTER];
+}
+
+message Capabilities {
+  optional uint32 a = 1; // 1
+  optional uint32 b = 2; // 4
+  optional uint32 c = 3; // 2
+}

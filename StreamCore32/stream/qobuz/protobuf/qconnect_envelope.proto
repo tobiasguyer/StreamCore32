@@ -1,0 +1,69 @@
+syntax = "proto2";
+package qconnect;
+import "nanopb.proto";
+// This is the OUTER WebSocket envelope layer.
+// It multiplexes different "protocols" and carries a raw payload.
+// When proto == QP_QCONNECT (=1), 'payload' is a serialized QConnectBatch
+// from qconnect_payload.proto.
+
+enum QCloudMessageType {
+  QCLOUD_MESSAGE_TYPE_UNSPECIFIED = 0;
+  AUTHENTICATE = 1;
+  SUBSCRIBE   = 2;
+  UNSUBSCRIBE = 3;
+  PAYLOAD     = 6;
+  ERROR       = 9;
+  DISCONNECT  = 10;
+}
+
+enum QCloudProto { // seen as numeric in bundle
+  QP_UNKNOWN  = 0;
+  QP_QCONNECT = 1;
+  QP_QCONNECT2 = 2;
+  QP_QCONNECT3 = 3;
+}
+
+// 88811/j
+message Authenticate {
+  optional uint32 msgId   = 1;
+  optional uint64 msgDate = 2; // ms epoch
+  optional string jwt     = 3 [(nanopb).type = FT_POINTER];
+}
+
+// 61641/F
+message Subscribe {
+  optional uint32 msgId    = 1;
+  optional uint64 msgDate = 2;
+  optional uint32 proto    = 3;           // QCloudProto
+  repeated bytes  channels = 4 [(nanopb).type = FT_POINTER];           // channel ids (bytes)
+}
+
+// 61641/U
+message Unsubscribe {
+  optional uint32 msgId    = 1;
+  optional uint64 msgDate = 2;
+  optional uint32 proto    = 3;           // QCloudProto
+  repeated bytes  channels = 4 [(nanopb).type = FT_POINTER];
+}
+
+// 61641/B
+message Payload {
+  optional uint32 msgId     = 1;
+  optional uint64 msgDate  = 2;
+
+  // Optional routing
+  optional uint32 proto     = 3; // QCloudProto
+  optional bytes  src       = 4 [(nanopb).type = FT_POINTER]; // channel id
+  repeated bytes  dests     = 5 [(nanopb).type = FT_POINTER]; // channel ids
+
+  // The raw bytes for the selected protocol.
+// If proto == QP_QCONNECT (1), interpret as qconnect.QConnectBatch.
+  optional bytes  payload   = 7 [(nanopb).type = FT_POINTER];
+}
+
+// 61641/q
+message Disconnect {
+  optional uint32 msgId     = 1;
+  optional uint64 msgDate  = 2;
+  optional bool   reconnect = 3;
+}

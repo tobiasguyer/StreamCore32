@@ -1,0 +1,112 @@
+syntax = "proto2";
+
+import "nanopb.proto";
+
+package player.proto.connect;
+
+import "protobuf/context_player_options.proto";
+import "protobuf/restrictions.proto";
+import "protobuf/utils.proto";
+
+message PlayerState {
+    optional int64 timestamp = 1;
+    optional string context_uri = 2 [(nanopb).type = FT_POINTER];
+    optional string context_url = 3 [(nanopb).type = FT_POINTER];
+    optional Restrictions context_restrictions = 4 [(nanopb).type = FT_POINTER];
+    optional PlayOrigin play_origin = 5;
+    optional ContextIndex index = 6;
+    optional ProvidedTrack track = 7;
+    optional string playback_id = 8 [(nanopb).type = FT_POINTER];
+    optional double playback_speed = 9;
+    optional int64 position_as_of_timestamp = 10;
+    optional int64 duration = 11;
+    optional bool is_playing = 12;
+    optional bool is_paused = 13;
+    optional bool is_buffering = 14;
+    optional bool is_system_initiated = 15;
+    optional ContextPlayerOptions options = 16;
+    optional Restrictions restrictions = 17;
+    optional Suppressions suppressions = 18;
+    repeated ProvidedTrack prev_tracks = 19;
+    repeated ProvidedTrack next_tracks = 20;
+    repeated MetadataEntry context_metadata = 21 [(nanopb).type = FT_POINTER];   
+    repeated MetadataEntry  page_metadata = 22 [(nanopb).type = FT_POINTER]; 
+    optional string session_id = 23 [(nanopb).type = FT_POINTER];
+    optional string queue_revision = 24 [(nanopb).type = FT_POINTER];
+    optional int64 position = 25;
+    optional string entity_uri = 26 [(nanopb).type = FT_POINTER];
+    repeated ProvidedTrack reverse = 27;
+    repeated ProvidedTrack future = 28;
+    optional PlaybackQuality playback_quality = 32;
+    optional string playback_provider = 33 [(nanopb).type = FT_POINTER];
+    optional string random_message = 35 [(nanopb).type = FT_POINTER];
+}
+
+message ProvidedTrack {
+    optional string uri = 1 [(nanopb).type = FT_POINTER];
+    optional string uid = 2 [(nanopb).type = FT_POINTER];
+    repeated MetadataEntry  metadata = 3 [(nanopb).type = FT_POINTER];     
+    optional string removed = 4 [(nanopb).type = FT_POINTER];
+    repeated string blocked = 5 [(nanopb).type = FT_POINTER];
+    optional string provider = 6 [(nanopb).type = FT_POINTER];
+    optional Restrictions restrictions = 7;
+    optional string album_uri = 8 [(nanopb).type = FT_POINTER];
+    repeated string disallow_reasons = 9 [(nanopb).type = FT_POINTER];
+    optional string artist_uri = 10 [(nanopb).type = FT_POINTER];
+    repeated string disallow_undecided = 11 [(nanopb).type = FT_POINTER];
+    optional bytes gid = 251 [(nanopb).type = FT_POINTER];
+    optional uint32 page = 252;
+    optional uint32 original_index = 253;
+    optional uint32 full_metadata_count = 254;
+}
+
+message ContextIndex {
+    optional uint32 page = 1;
+    optional uint32 track = 2;
+}
+
+message PlayOrigin {
+    optional string feature_identifier = 1 [(nanopb).type = FT_POINTER];
+    optional string feature_version = 2 [(nanopb).type = FT_POINTER];
+    optional string view_uri = 3 [(nanopb).type = FT_POINTER];
+    optional string external_referrer = 4 [(nanopb).type = FT_POINTER];
+    optional string referrer_identifier = 5 [(nanopb).type = FT_POINTER];
+    optional string device_identifier = 6 [(nanopb).type = FT_POINTER];
+    optional string feature_classes = 7 [(nanopb).type = FT_POINTER];
+}
+
+message Suppressions {
+    repeated string providers = 1;
+}
+
+enum BitrateLevel {
+    unknown = 0;
+    low = 1;
+    normal = 2;
+    high = 3;
+    veryhigh = 4;
+    normalized = 5;
+}
+
+enum BitrateStrategy {
+    unknown_strategy = 0;
+    best_matching = 1;
+    backend_advised = 2;
+    offlined_file = 3;
+    cached_file = 4;
+    local_file = 5;
+}
+
+enum HiFiStatus {
+    none = 0;
+    off = 1;
+    on = 2;
+}
+
+message PlaybackQuality {
+    optional BitrateLevel bitrate_level = 1;
+    optional BitrateStrategy strategy = 2;
+    optional BitrateLevel target_bitrate_level = 3;
+    optional bool target_bitrate_available = 4;
+    optional HiFiStatus hifi_status = 5;
+}

@@ -1,0 +1,158 @@
+menu "Spotify Configuration"
+
+    config SPOTIFY_DEVICE_NAME
+        string "Spotify Device Name"
+        default "StreamCore32"
+        help
+            Define the name of the spotify connect device (will be visible to the client).
+             
+
+    config STREAM_BUFFER_SIZE_RECOMMENDED
+        int
+        default 81920 if AUDIO_SINK_VS1053
+        default 65792
+
+    config STREAM_BUFFER_SIZE_CUSTOM
+        bool "Set custom buffer size"
+        default n
+        help
+            Enable to enter a custom buffer size instead of the recommended value.
+
+    config STREAM_BUFFER_SIZE_VALUE
+        int "Buffer Size"
+        default STREAM_BUFFER_SIZE_RECOMMENDED
+        depends on STREAM_BUFFER_SIZE_CUSTOM
+        help
+            Recommended buffer size is a multiple of 1024.
+
+    config STREAM_BUFFER_SIZE
+        int
+        default STREAM_BUFFER_SIZE_VALUE if STREAM_BUFFER_SIZE_CUSTOM
+        default STREAM_BUFFER_SIZE_RECOMMENDED
+
+    choice SPOTIFY_QUALITY
+        prompt "Audio Quality (BPS)"
+        default VORBIS_160
+        help
+            Audio quality (not used currently)
+        config VORBIS_320
+            bool "320 bps"
+        config VORBIS_160
+            bool "160 bps"
+        config VORBIS_96
+            bool "96 bps"
+    endchoice
+
+    config SPOTIFY_AUDIO_FORMAT
+        int
+        default 0 if VORBIS_96
+        default 1 if VORBIS_160
+        default 2 if VORBIS_320
+        default 3 if MP3_256
+        default 4 if MP3_320
+        default 5 if MP3_160
+        default 6 if MP3_96
+        default 7 if MP3_160_ENC
+        default 8 if AAC_24
+        default 9 if AAC_48
+
+    choice SPOTIFY_STATUS_LED_TYPE
+        prompt "Status LED type"
+        default SPOTIFY_STATUS_LED_TYPE_NONE
+        help
+            Defines the default peripheral for status led
+
+        config SPOTIFY_STATUS_LED_TYPE_NONE
+            bool "No status LED"
+        config SPOTIFY_STATUS_LED_TYPE_GPIO
+            bool "GPIO"
+        config SPOTIFY_STATUS_LED_TYPE_RMT
+            bool "RMT - Addressable LED"
+    endchoice
+
+    choice SPOTIFY_LOGIN
+    prompt "Login type"
+    default SPOTIFY_LOGIN_ZEROCONF
+    help
+        Select login form
+
+    config SPOTIFY_LOGIN_ZEROCONF
+        bool "Login with zeroconfServer"
+        help
+            login with zeroconf
+    config SPOTIFY_LOGIN_PASS
+        bool "Login with password"    
+    endchoice
+
+    menu "Username & password"
+        visible if SPOTIFY_LOGIN_PASS
+        config SPOTIFY_LOGIN_USERNAME
+        string "Spotify username"
+        default "username"
+        config SPOTIFY_LOGIN_PASSWORD
+        string "Spotify password"
+        default "password"
+        help
+            login with username and password
+        endmenu
+
+    config SPOTIFY_DISCOVERY_MODE_OPEN
+    bool "SPOTIFY Device Visibility Mode"
+    default y
+        help
+            In this mode, the mDNS announcement remains active, making the device 
+            visible to all devices on the local network, even while it is actively 
+            connected and controlled. Playback rights can be transferred to another 
+            device without disconnecting.
+            
+    config UPDATE_FUTURE_TRACKS
+        int "Send tracks to spotify"
+    range 0 100
+        default 10
+        help
+            How many tracks are visible in the currently playing header
+
+endmenu
+
+#audioSinkSpecific kconfig
+menu "Audio Sink Configuration"
+    choice AUDIO_SINK
+        prompt "Sink Device"
+        default AUDIO_SINK_INTERNAL
+        help
+            Select audio sink device
+        
+        config AUDIO_SINK_VS1053
+            bool "VS1053"
+        config AUDIO_SINK_INTERNAL
+            bool "Built-in DAC"
+        config AUDIO_SINK_AC101
+            bool "AC101"
+        config AUDIO_SINK_ES8388
+            bool "ES8388"
+        config AUDIO_SINK_ES9018
+            bool "ES8018"
+        config AUDIO_SINK_PCM5102
+            bool "PCM5102"
+        config AUDIO_SINK_TAS5711
+            bool "TAS5711"
+            
+    endchoice
+
+    config BELL_NOCODEC
+        bool
+        default y
+        depends on AUDIO_SINK_VS1053       
+
+    visible if AUDIO_SINK_VS1053
+    rsource  "../../../StreamCore32/bell/main/audio-sinks/include/esp/VS1053/Kconfig"
+endmenu
+#wifi kconfig
+menu "WiFi Configuration"
+    config WIFI_SSID
+        string "WiFi SSID"
+        default "SSID"
+    config WIFI_PASSWORD
+        string "WiFi Password"
+        default "password"
+endmenu

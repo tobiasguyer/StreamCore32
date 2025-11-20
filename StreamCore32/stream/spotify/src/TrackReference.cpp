@@ -1,0 +1,54 @@
+#include "TrackReference.h"
+
+#include "NanoPBExtensions.h"
+#include "protobuf/connect.pb.h"
+
+using namespace spotify;
+
+static std::string empty_string = "";
+
+TrackReference::TrackReference() : type(Type::TRACK) {}
+
+bool TrackReference::operator==(const TrackReference& other) const {
+  return other.gid == gid && other.uri == uri;
+}
+
+bool TrackReference::pbEncodeProvidedTracks(pb_ostream_t* stream,
+                                            const pb_field_t* field,
+                                            void* const* arg) {
+  auto trackPacket = (std::pair<uint8_t*, std::vector<player_proto_connect_ProvidedTrack>*>*)(*arg);
+  if (*trackPacket->first >= trackPacket->second->size() ||
+      !trackPacket->second->size())
+    return true;
+  for (int i = *trackPacket->first; i < trackPacket->second->size(); i++) {
+    if (!pb_encode_tag_for_field(stream, field)) {
+      return false;
+    }
+    if (!pb_encode_submessage(stream, player_proto_connect_ProvidedTrack_fields,
+                              &(trackPacket->second->at(i))))
+      return false;
+    //if there's a delimiter, or the tracks are over the track treshhold
+    if (trackPacket->second->at(i).removed != NULL ||
+        i - *trackPacket->first >= TRACK_SEND_LIMIT || stream->bytes_written >= 14000){
+          break;
+        }
+  }
+  return true;
+}
+
+bool TrackReference::pbDecodeProvidedTracks(pb_istream_t* stream,
+                                            const pb_field_t* field,
+                                            void** arg) {
+  auto trackQueue = static_cast<std::vector<player_proto_connect_ProvidedTrack>*>(*arg);
+
+  // Push a new reference
+  trackQueue->push_back(player_proto_connect_ProvidedTrack());
+
+  auto& track = trackQueue->back();
+
+  if (!pb_decode(stream, player_proto_connect_ProvidedTrack_fields, &track))
+    return false;
+  track.full_metadata_count = track.metadata_count;
+
+  return true;
+}

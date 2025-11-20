@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.15)
+project(stream CXX)
+
+option(STREAMCORE_BUILD_SPOTIFY     "Build stream/spotify"      ON)
+option(STREAMCORE_BUILD_QOBUZ     "Build stream/qobuz"      ON)
+option(STREAMCORE_BUILD_WEBSTREAM   "Build stream/webstream"    ON)
+
+if(STREAMCORE_BUILD_SPOTIFY   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/spotify/CMakeLists.txt")
+  add_subdirectory(spotify)
+endif()
+if(STREAMCORE_BUILD_QOBUZ   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/qobuz/CMakeLists.txt")
+  add_subdirectory(qobuz)
+endif()
+if(STREAMCORE_BUILD_WEBSTREAM  AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/webstream/CMakeLists.txt")
+  add_subdirectory(webstream)
+endif()

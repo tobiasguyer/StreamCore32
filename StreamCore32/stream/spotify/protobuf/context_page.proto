@@ -1,0 +1,17 @@
+syntax = "proto2";
+
+import "nanopb.proto";
+
+package player.proto;
+
+import "protobuf/context_track.proto";
+import "protobuf/utils.proto";
+//option optimize_for = CODE_SIZE;
+message ContextPage {
+    optional string page_url = 1 [(nanopb).type = FT_POINTER];
+    optional string next_page_url = 2 [(nanopb).type = FT_POINTER];
+
+    repeated MetadataEntry metadata = 3 [(nanopb).type = FT_POINTER];
+    repeated ContextTrack tracks = 4 [(nanopb).type = FT_POINTER];
+    optional bool loading = 5;
+}

@@ -1,0 +1,33 @@
+syntax = "proto2";
+
+import "nanopb.proto";
+package player.proto;
+
+//option optimize_for = CODE_SIZE;
+
+message Restrictions {
+    repeated string disallow_pausing_reasons = 1 [(nanopb).type = FT_POINTER];
+    repeated string disallow_resuming_reasons = 2 [(nanopb).type = FT_POINTER];
+    repeated string disallow_seeking_reasons = 3 [(nanopb).type = FT_POINTER];
+    repeated string disallow_peeking_prev_reasons = 4 [(nanopb).type = FT_POINTER];
+    repeated string disallow_peeking_next_reasons = 5 [(nanopb).type = FT_POINTER];
+    repeated string disallow_skipping_prev_reasons = 6 [(nanopb).type = FT_POINTER];
+    repeated string disallow_skipping_next_reasons = 7 [(nanopb).type = FT_POINTER];
+    repeated string disallow_toggling_repeat_context_reasons = 8 [(nanopb).type = FT_POINTER];
+    repeated string disallow_toggling_repeat_track_reasons = 9 [(nanopb).type = FT_POINTER];
+    repeated string disallow_toggling_shuffle_reasons = 10 [(nanopb).type = FT_POINTER];
+    repeated string disallow_set_queue_reasons = 11 [(nanopb).type = FT_POINTER];
+    repeated string disallow_interrupting_playback_reasons = 12 [(nanopb).type = FT_POINTER];
+    repeated string disallow_transferring_playback_reasons = 13 [(nanopb).type = FT_POINTER];
+    repeated string disallow_remote_control_reasons = 14 [(nanopb).type = FT_POINTER];
+    repeated string disallow_inserting_into_next_tracks_reasons = 15 [(nanopb).type = FT_POINTER];
+    repeated string disallow_inserting_into_context_tracks_reasons = 16 [(nanopb).type = FT_POINTER];
+    repeated string disallow_reordering_in_next_tracks_reasons = 17 [(nanopb).type = FT_POINTER];
+    repeated string disallow_reordering_in_context_tracks_reasons = 18 [(nanopb).type = FT_POINTER];
+    repeated string disallow_removing_from_next_tracks_reasons = 19 [(nanopb).type = FT_POINTER];
+    repeated string disallow_removing_from_context_tracks_reasons = 20 [(nanopb).type = FT_POINTER];
+    repeated string disallow_updating_context_reasons = 21 [(nanopb).type = FT_POINTER];
+    repeated string disallow_playing_reasons = 22 [(nanopb).type = FT_POINTER];
+    repeated string disallow_stopping_reasons = 23 [(nanopb).type = FT_POINTER];
+    repeated string disallow_loading_context_reasons = 25 [(nanopb).type = FT_POINTER];
+}

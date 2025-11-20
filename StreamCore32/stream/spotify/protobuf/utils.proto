@@ -1,0 +1,12 @@
+syntax = "proto2";
+
+import "nanopb.proto";
+
+
+//option optimize_for = CODE_SIZE;
+
+
+message MetadataEntry {
+  optional string key   = 1 [(nanopb).type = FT_POINTER];
+  optional string value = 2 [(nanopb).type = FT_POINTER];
+};

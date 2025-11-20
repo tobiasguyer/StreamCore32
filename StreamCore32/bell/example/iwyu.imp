@@ -1,0 +1,40 @@
+[
+  { include: ["<__functional_base>", private, "<functional>", public ] },
+  { include: ["<__functional/function.h>", private, "<functional>", public ] },
+  { include: ["<__memory/shared_ptr.h>", private, "<memory>", public ] },
+  { include: ["<__memory/unique_ptr.h>", private, "<memory>", public ] },
+  { include: ["<__mutex_base>", private, "<mutex>", public ] },
+  { include: ["<__random>", private, "<random>", public ] },
+  { include: ["<__utility>", private, "<utility>", public ] },
+  { include: ["<__chrono/duration.h>", private, "<chrono>", public ] },
+  { include: ["<__chrono/system_clock.h>", private, "<chrono>", public ] },
+
+  { symbol: ["std::make_unique", "public", "<memory>", "public"] },
+  { symbol: ["std::unique_ptr", "public", "<memory>", "public"] },
+  { symbol: ["std::make_shared", "public", "<memory>", "public"] },
+  { symbol: ["std::shared_ptr", "public", "<memory>", "public"] },
+
+  { symbol: ["std::find", "public", "<algorithm>", "public"] },
+  { symbol: ["std::copy", "public", "<algorithm>", "public"] },
+  { symbol: ["std::min", "public", "<algorithm>", "public"] },
+  { symbol: ["std::transform", "public", "<algorithm>", "public"] },
+
+  { symbol: ["std::default_random_engine", "public", "<random>", "public"] },
+  { symbol: ["std::independent_bits_engine", "public", "<random>", "public"] },
+  { symbol: ["std::mt19937", "public", "<random>", "public"] },
+  { symbol: ["std::uniform_int_distribution", "public", "<random>", "public"] },
+  { symbol: ["std::random_device", "public", "<random>", "public"] },
+
+# Needed to avoid <iosfwd>
+  { symbol: ["std::ostringstream", "public", "<sstream>", "public"] },
+  { symbol: ["std::istream", "public", "<istream>", "public"] },
+  { symbol: ["std::ofstream", "public", "<fstream>", "public"] },
+  { symbol: ["std::ifstream", "public", "<fstream>", "public"] },
+  { symbol: [ "std::declval", private, "<utility>", public ] },
+  { symbol: [ "std::swap", private, "<utility>", public ] },
+  { symbol: [ "std::forward", private, "<utility>", public ] },
+  { symbol: [ "std::move", private, "<utility>", public ] },
+  { symbol: [ "std::pair", private, "<utility>", public ] },
+  { symbol: [ "std::nullptr_t", private, "<cstddef>", public ] },
+  { symbol: [ "std::string", private, "<string>", public ] },
+]

@@ -1,0 +1,19 @@
+syntax = "proto2";
+
+import "nanopb.proto";
+package player.proto;
+
+import "protobuf/context_page.proto";
+import "protobuf/restrictions.proto";
+import "protobuf/utils.proto";
+
+//option optimize_for = CODE_SIZE;
+
+message Context {
+    optional string uri = 1 [(nanopb).type = FT_POINTER];
+    optional string url = 2 [(nanopb).type = FT_POINTER];
+    repeated MetadataEntry metadata = 3[(nanopb).type = FT_POINTER];
+    optional Restrictions restrictions = 4;
+    repeated ContextPage pages = 5 [(nanopb).type = FT_POINTER];
+    optional bool loading = 6;
+}
