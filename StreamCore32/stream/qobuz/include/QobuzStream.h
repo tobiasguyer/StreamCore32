@@ -53,7 +53,7 @@ public:
     uint32_t expiresAt = 0;
     uint64_t rendererId = 0;
     WSToken ws_token;
-    WSToken api_token;
+    Token api_token;
 
     int audioFormat = 6; // 5: MP3_320, 6: FLAC_16_44, 27: Hi-Res FLAC
     bool empty() const {
@@ -386,9 +386,8 @@ public:
           this->cfg_.ws_token.jwt       = j.at("jwt_qconnect").at("jwt").get<std::string>();
           this->cfg_.ws_token.exp_s     = j.at("jwt_qconnect").at("exp").get<uint64_t>();
 
-          this->cfg_.api_token.endpoint = j.at("jwt_api").at("endpoint").get<std::string>();
-          this->cfg_.api_token.jwt      = j.at("jwt_api").at("jwt").get<std::string>();
-          this->cfg_.api_token.exp_s    = j.at("jwt_api").at("exp").get<uint64_t>();
+          this->cfg_.api_token.token    = j.at("jwt_api").at("jwt").get<std::string>();
+          this->cfg_.api_token.expiresAt= j.at("jwt_api").at("exp").get<uint64_t>() * 1000;
           this->isActive_.store(true);
           this->startTask();
         } catch (const std::exception& e) {
@@ -414,6 +413,7 @@ public:
   void WSAskForQueueState();
   void WSAskForRendererState();
   void WSSetRendererVolume();
+  bool refreshApiToken();
   bool open(const std::string& trackId);
 
   void encodeBatches(qconnect_QConnectMessage* args, size_t count) {
@@ -473,6 +473,7 @@ private:
   //void reportStreamingEnd();
   //void reportStreamingStart();
   Config cfg_;
+  std::unique_ptr<Heartbeat> token_hb_;
 
   std::unique_ptr<StreamCoreFile> creds;
   std::unique_ptr<QobuzConfig> config_;

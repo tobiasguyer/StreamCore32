@@ -25,8 +25,7 @@ static std::string build_query(const std::vector<std::pair<std::string, std::str
 }
 
 void QobuzStream::runTask() {
-
-  if (cfg_.api_token.jwt.empty()) {
+  if (cfg_.api_token.token.empty()) {
     if (!login()) {
       BELL_LOG(error, "QOBUZ", "Qobuz login failed");
       return;
@@ -54,9 +53,8 @@ void QobuzStream::runTask() {
       };
       if (!cfg_.userAuthToken.empty()) {
         headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
-      }
-      else if (!cfg_.api_token.jwt.empty()) {
-        headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.jwt });
+      } else if (!cfg_.api_token.token.empty()) {
+        headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
       }
       if (sign) return qobuzGet(cfg_.api_base, object,
         action, headers, params,
@@ -86,9 +84,8 @@ void QobuzStream::runTask() {
       };
       if (!cfg_.userAuthToken.empty()) {
         headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
-      }
-      else if (!cfg_.api_token.jwt.empty()) {
-        headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.jwt });
+      } else if (!cfg_.api_token.token.empty()) {
+        headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
       }
       if (body.empty()) {
         if (sign) return qobuzPost(cfg_.api_base, object,
@@ -141,6 +138,16 @@ void QobuzStream::runTask() {
     });
   wsManager->startTask();
   queue_->startTask();
+  token_hb_ = std::make_unique<Heartbeat>([&]() {
+    if(cfg_.userAuthToken.empty()) {
+      if(cfg_.api_token.expiresAt <= timesync::now_ms() + 60000) {
+        refreshApiToken();
+      }
+    } else if(cfg_.XsessionId.expiresAt <= timesync::now_ms() + 60000) {
+      startSession();
+    }
+    }, 30000);
+  token_hb_->start();
 }
 
 bool QobuzStream::login() {
@@ -172,6 +179,32 @@ bool QobuzStream::login() {
   BELL_LOG(info, "Qobuz", "Qobuz login finished with app_id: %s and user_auth_token: %s", cfg_.appId.c_str(), cfg_.userAuthToken.c_str());
   return !cfg_.userAuthToken.empty();
 }
+
+bool QobuzStream::refreshApiToken() {
+  HTTPClient::Headers headers = {
+    {"Referer", "https://play.qobuz.com/"},
+    {"Content-Type", "application/x-www-form-urlencoded"},
+    {"Origin", "https://play.qobuz.com"},
+    {"X-App-Id", cfg_.appId},
+    {"X-Session-Id", cfg_.XsessionId.token},
+    { "Authorization", "Bearer " + cfg_.api_token.token },
+  };
+  auto resp = qobuzPost(cfg_.api_base, "qws", "refreshToken", headers, "jwt=jwt_api");
+  if (resp->status() == 200) {
+    std::string body = resp->body_string();
+    BELL_LOG(info, "Qobuz", "Qobuz token: %s", body.c_str());
+    nlohmann::json j = nlohmann::json::parse(body);
+    cfg_.api_token.token = j["jwt_api"]["jwt"];
+    cfg_.api_token.expiresAt = j["jwt_api"]["exp"].get<uint64_t>() * 1000;
+  }
+  else {
+    BELL_LOG(info, "Qobuz", "Qobuz token: %s", resp->body_string().c_str());
+    return false;
+  }  
+  return true;
+}
+
+
 std::unique_ptr<bell::HTTPClient::Response> QobuzStream::qobuzGet(
   const std::string& url_base,
   const std::string& object, //session, user, file
@@ -227,30 +260,52 @@ std::unique_ptr<bell::HTTPClient::Response> QobuzStream::qobuzPost(
 
 WSToken QobuzStream::getWSToken() {
   WSToken token = cfg_.ws_token;
-  if (!cfg_.userAuthToken.empty()) {
-    auto resp = qobuzPost(cfg_.api_base, "qws", "createToken", {
-      {"Referer", "https://play.qobuz.com/"},
-      {"Content-Type", "application/x-www-form-urlencoded"},
-      {"Origin", "https://play.qobuz.com"},
-      {"X-App-Id", cfg_.appId},
-      {"X-User-Auth-Token", cfg_.userAuthToken},
-      }, "jwt=jwt_qws");
-    if (resp->status() == 200) {
-      BELL_LOG(info, "Qobuz", "Qobuz token: %s", resp->body_string().c_str());
-      nlohmann::json j = nlohmann::json::parse(resp->body_string());
-      token.jwt = j["jwt_qws"]["jwt"];
-      token.exp_s = j["jwt_qws"]["exp"];
-      token.endpoint = URLParser::urlDecode(j["jwt_qws"]["endpoint"]);
-    }
-    else {
-      BELL_LOG(info, "Qobuz", "Qobuz token: %s", resp->body_string().c_str());
-    }
+  if (cfg_.userAuthToken.empty() && token.jwt.empty()) return token;
+  if (token.exp_s != 0 && token.exp_s > timesync::now_s() + 60) {
+    BELL_LOG(info, "Qobuz", "Qobuz existing token valid");
+    return token;
   }
+  HTTPClient::Headers headers = {
+    {"Referer", "https://play.qobuz.com/"},
+    {"Content-Type", "application/x-www-form-urlencoded"},
+    {"Origin", "https://play.qobuz.com"},
+    {"X-App-Id", cfg_.appId},
+    {"X-Session-Id", cfg_.XsessionId.token},
+  };
+  if(!cfg_.userAuthToken.empty()) {
+    headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
+  } else if (!cfg_.api_token.token.empty()) {
+    headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
+  }
+  std::string endpoint;
+  if(cfg_.ws_token.jwt.empty()) endpoint = "createToken";
+  else endpoint = "refreshToken";
+  auto resp = qobuzPost(cfg_.api_base, "qws", endpoint, headers, "jwt=jwt_qws");
+  if (resp->status() == 200) {
+    std::string body = resp->body_string();
+    nlohmann::json j = nlohmann::json::parse(body);
+    token.jwt = j["jwt_qws"]["jwt"];
+    token.exp_s = j["jwt_qws"]["exp"];
+    token.endpoint = URLParser::urlDecode(j["jwt_qws"]["endpoint"]);
+  }
+  else {
+    BELL_LOG(info, "Qobuz", "Qobuz token: %s", resp->body_string().c_str());
+  }
+  
   return token;
 }
 
 bool QobuzStream::startSession() {
-  if (cfg_.userAuthToken.empty()) return false;
+  BELL_LOG(info, "Qobuz", "Qobuz start session");
+  if (cfg_.XsessionId.token.size() && !cfg_.XsessionId.expiresAt) {
+    BELL_LOG(info, "Qobuz", "Qobuz session Id has no expiry");
+    return true;
+  }
+  if (cfg_.userAuthToken.empty() && cfg_.api_token.token.empty()) return false;
+  if (cfg_.XsessionId.expiresAt > timesync::now_ms() + 60000) {
+    BELL_LOG(info, "Qobuz", "Qobuz existing session valid");
+    return true;
+  }
   timesync::wait_until_valid(8000);
 
   const std::string ts_text = timesync::now_s_text(6);
@@ -260,19 +315,25 @@ bool QobuzStream::startSession() {
   };
 
   const std::string app_secret = qobuz::maybe_unpack_secret(cfg_.appSecret);
-  const std::string sig = qobuz::md5_sig("session", "start", params, ts_text, app_secret);
+  std::string endpoint = "start";
+  const std::string sig = qobuz::md5_sig("session", endpoint, params, ts_text, app_secret);
 
   const std::string body =
     qobuz::build_query(params) +
     "&request_ts=" + ts_text +
     "&request_sig=" + sig;
-  auto resp = qobuzPost(cfg_.api_base, "session", "start", {
+  HTTPClient::Headers headers = {
     {"Referer", "https://play.qobuz.com/"},
     {"Content-Type", "application/x-www-form-urlencoded"},
     {"Origin", "https://play.qobuz.com"},
     {"X-App-Id", cfg_.appId},
-    {"X-User-Auth-Token", cfg_.userAuthToken},
-    }, body);
+  };
+  if(!cfg_.userAuthToken.empty()) {
+    headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
+  } else if (!cfg_.api_token.token.empty()) {
+    headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
+  }
+  auto resp = qobuzPost(cfg_.api_base, "session", endpoint, headers, body);
   if (resp->status() != 200) {
     BELL_LOG(info, "Qobuz", "Qobuz start: %s", resp->body_string().c_str());
     return false;
@@ -310,9 +371,8 @@ bool QobuzStream::open(const std::string& trackId) {
   };
   if (!cfg_.userAuthToken.empty()) {
     headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
-  }
-  else if (!cfg_.api_token.jwt.empty()) {
-    headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.jwt });
+  } else if (!cfg_.api_token.token.empty()) {
+    headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
   }
 
   auto resp = qobuzGet(cfg_.api_base, "track", "getFileUrl", headers, params, ts_text, cfg_.appSecret);
