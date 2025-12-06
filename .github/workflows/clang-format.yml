@@ -12,4 +12,4 @@ jobs:
     - uses: cachix/install-nix-action@v18
       with:
         nix_path: nixpkgs=channel:nixos-23.05
-    - run: nix develop --command python3 .github/scripts/run-clang-format.py -r StreamCore32/src StreamCore32/include
+    - run: nix develop --command python3 .github/scripts/run-clang-format.py -r StreamCore32/core/src StreamCore32/core/include StreamCore32/stream/spotify/src StreamCore32/stream/spotify/include StreamCore32/stream/qobuz/src StreamCore32/stream/qobuz/include StreamCore32/stream/webstream/src StreamCore32/stream/webstream/include
