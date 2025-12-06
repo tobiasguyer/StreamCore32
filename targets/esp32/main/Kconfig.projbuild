@@ -118,7 +118,7 @@ endmenu
 menu "Audio Sink Configuration"
     choice AUDIO_SINK
         prompt "Sink Device"
-        default AUDIO_SINK_INTERNAL
+        default AUDIO_SINK_VS1053
         help
             Select audio sink device
         

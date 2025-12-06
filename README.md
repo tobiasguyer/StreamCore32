@@ -14,13 +14,9 @@ This library is derived from [feelfreelinux/cspot](https://github.com/feelfreeli
 
 Summary:
 
-- cmake (version 3.0 or higher)
-- gcc / clang for the CLI target
 - [esp-idf](https://github.com/espressif/esp-idf) v5.5 or higher
 - downloaded submodules
-- golang (1.16)
 - protoc
-- mbedtls
 
 This project utilizes submodules, please make sure you are cloning with the `--recursive` flag or use `git submodule update --init --recursive`.
 
@@ -57,7 +53,6 @@ $ idf.py menuconfig
 
 Navigate to `WiFi Configuration` and provide wifi connection details
 
-
 Navigate to `Spotify Configuration`, you may configure device name and audio quality.
 
 Navigate to `Audio Sink Configuration`, you may configure the audio sink and further options.
@@ -88,7 +83,7 @@ $ idf.py build flash monitor
 
 ## External interface
 
-`streamcore` is meant to be used as a lightweight C++ library for playing back Spotify music and receive control notifications from Spotify connect. 
+`streamcore` is meant to be used as a lightweight C++ library for playing back Spotify/Qobuz/Web-Radio music and receive control notifications from Spotify-/Qobuz-connect. 
 It exposes an interface for starting the communication with Spotify and Qobuz servers trough MDNS.
 
 ## Internal details
