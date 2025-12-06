@@ -1,7 +1,7 @@
 
 
-StreamCore32 - a c implementation of the spotify protocol.
-    Copyright (C) 2020 feelfreelinux & alufers
+StreamCore32 - a c implementation of the spotify and qobuz protocol.
+    Copyright (C) 2025 tobiasguyer
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
