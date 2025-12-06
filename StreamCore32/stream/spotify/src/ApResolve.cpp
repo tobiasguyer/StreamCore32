@@ -27,14 +27,14 @@ std::string ApResolve::fetchFirstApAddress() {
 
   auto request = bell::HTTPClient::get("https://apresolve.spotify.com/");
   std::string responseStr = request->body_string();
-  if(responseStr == "") {
+  if (responseStr == "") {
     return "";
   }
   // parse json with nlohmann
 #ifdef BELL_ONLY_CJSON
   cJSON* json = cJSON_Parse(responseStr.data());
   auto ap_string = std::string(
-      cJSON_GetArrayItem(cJSON_GetObjectItem(json, "ap_list"), 0)->valuestring);
+    cJSON_GetArrayItem(cJSON_GetObjectItem(json, "ap_list"), 0)->valuestring);
   cJSON_Delete(json);
   return ap_string;
 #else

@@ -15,7 +15,7 @@
 #endif
 #include "BellLogger.h"  // for AbstractLogger
 #include "BellUtils.h"   // for BELL_SLEEP
-#include "Logger.h"      // for SPOTIFY_LOG
+#include "Logger.h"      // for SC32_LOG
 #include "Packet.h"      // for spotify
 #include "Utils.h"       // for extract, pack
 
@@ -43,10 +43,10 @@ PlainConnection::~PlainConnection() {
 };
 
 void PlainConnection::connect(const std::string& apAddress) {
-  struct addrinfo h, *airoot, *ai;
+  struct addrinfo h, * airoot, * ai;
   std::string hostname = apAddress.substr(0, apAddress.find(":"));
   std::string portStr =
-      apAddress.substr(apAddress.find(":") + 1, apAddress.size());
+    apAddress.substr(apAddress.find(":") + 1, apAddress.size());
   memset(&h, 0, sizeof(h));
   h.ai_family = AF_INET;
   h.ai_socktype = SOCK_STREAM;
@@ -54,7 +54,7 @@ void PlainConnection::connect(const std::string& apAddress) {
 
   // Lookup host
   if (getaddrinfo(hostname.c_str(), portStr.c_str(), &h, &airoot)) {
-    SPOTIFY_LOG(error, "getaddrinfo failed");
+    SC32_LOG(error, "getaddrinfo failed");
   }
 
   // find the right ai, connect to server
@@ -67,7 +67,7 @@ void PlainConnection::connect(const std::string& apAddress) {
       continue;
 
     if (::connect(this->apSock, (struct sockaddr*)ai->ai_addr,
-                  ai->ai_addrlen) != -1) {
+      ai->ai_addrlen) != -1) {
 #ifdef _WIN32
       uint32_t tv = 3000;
 #else
@@ -76,16 +76,16 @@ void PlainConnection::connect(const std::string& apAddress) {
       tv.tv_usec = 0;
 #endif
       setsockopt(this->apSock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv,
-                 sizeof tv);
+        sizeof tv);
       setsockopt(this->apSock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv,
-                 sizeof tv);
+        sizeof tv);
 
       int flag = 1;
       setsockopt(this->apSock, /* socket affected */
-                 IPPROTO_TCP,  /* set option at TCP level */
-                 TCP_NODELAY,  /* name of option */
-                 (char*)&flag, /* the cast is historical cruft */
-                 sizeof(int)); /* length of option value */
+        IPPROTO_TCP,  /* set option at TCP level */
+        TCP_NODELAY,  /* name of option */
+        (char*)&flag, /* the cast is historical cruft */
+        sizeof(int)); /* length of option value */
       break;
     }
 
@@ -99,7 +99,7 @@ void PlainConnection::connect(const std::string& apAddress) {
   }
 
   freeaddrinfo(airoot);
-  SPOTIFY_LOG(debug, "Connected to spotify server");
+  SC32_LOG(debug, "Connected to spotify server");
 }
 
 std::vector<uint8_t> PlainConnection::recvPacket() {
@@ -117,7 +117,7 @@ std::vector<uint8_t> PlainConnection::recvPacket() {
 }
 
 std::vector<uint8_t> PlainConnection::sendPrefixPacket(
-    const std::vector<uint8_t>& prefix, const std::vector<uint8_t>& data) {
+  const std::vector<uint8_t>& prefix, const std::vector<uint8_t>& data) {
   // Calculate full packet length
   uint32_t actualSize = prefix.size() + data.size() + sizeof(uint32_t);
 
@@ -144,29 +144,29 @@ size_t PlainConnection::writeBlock(const std::vector<uint8_t>& data) {
     if (n > 0) { idx += static_cast<size_t>(n); continue; }
 
     if (n == 0) {
-      SPOTIFY_LOG(error, "write: send returned 0 (peer?)");
+      SC32_LOG(error, "write: send returned 0 (peer?)");
       throw std::runtime_error("Peer closed");
     }
 
     const int e = getErrno();
     if (e == EAGAIN
 #ifdef EWOULDBLOCK
-        || e == EWOULDBLOCK
+      || e == EWOULDBLOCK
 #endif
-        || e == ETIMEDOUT) {
+      || e == ETIMEDOUT) {
       if (timeoutHandler()) {
-        SPOTIFY_LOG(error, "write: timeoutHandler() says reconnect");
+        SC32_LOG(error, "write: timeoutHandler() says reconnect");
         throw std::runtime_error("Reconnection required");
       }
       continue;
     }
     if (e == EINTR) continue;
     if (e == EPIPE || e == ECONNRESET) {
-      SPOTIFY_LOG(error, "write: connection lost (errno=%d %s)", e, strerror(e));
+      SC32_LOG(error, "write: connection lost (errno=%d %s)", e, strerror(e));
       throw std::runtime_error("Reconnection required");
     }
 
-    SPOTIFY_LOG(error, "write: fatal errno=%d (%s)", e, strerror(e));
+    SC32_LOG(error, "write: fatal errno=%d (%s)", e, strerror(e));
     throw std::runtime_error("Error in write");
   }
   return data.size();
@@ -184,19 +184,19 @@ void PlainConnection::readBlock(uint8_t* dst, size_t size) {
     }
 
     if (n == 0) {
-      SPOTIFY_LOG(error, "read: peer closed (recv==0)");
+      SC32_LOG(error, "read: peer closed (recv==0)");
       throw std::runtime_error("Peer closed");
     }
 
     const int e = getErrno();
     if (e == EAGAIN
 #ifdef EWOULDBLOCK
-        || e == EWOULDBLOCK
+      || e == EWOULDBLOCK
 #endif
-        || e == ETIMEDOUT) {
+      || e == ETIMEDOUT) {
       // Soft timeout: ask the higher-level timeoutHandler
       if (timeoutHandler()) {
-        SPOTIFY_LOG(error, "read: timeoutHandler() says reconnect");
+        SC32_LOG(error, "read: timeoutHandler() says reconnect");
         throw std::runtime_error("Reconnection required");
       }
       continue; // try again
@@ -204,7 +204,7 @@ void PlainConnection::readBlock(uint8_t* dst, size_t size) {
 
     if (e == EINTR) continue;
 
-    SPOTIFY_LOG(error, "read: fatal errno=%d (%s)", e, strerror(e));
+    SC32_LOG(error, "read: fatal errno=%d (%s)", e, strerror(e));
     throw std::runtime_error("Error in read");
   }
 }
@@ -214,7 +214,7 @@ void PlainConnection::close() {
   if (this->apSock < 0)
     return;
 
-  SPOTIFY_LOG(info, "Closing socket...");
+  SC32_LOG(info, "Closing socket...");
   shutdown(this->apSock, SHUT_RDWR);
 #ifdef _WIN32
   closesocket(this->apSock);

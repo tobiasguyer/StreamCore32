@@ -12,7 +12,7 @@
 #include "nlohmann/json.hpp"      // for basic_json<>::object_t, basic_json
 #include "nlohmann/json_fwd.hpp"  // for json
 #include "QobuzSign.h"
-
+uint64_t current_session_id;
 static std::string build_query(const std::vector<std::pair<std::string, std::string>>& kv) {
   std::string q;
   q.reserve(128);
@@ -27,7 +27,7 @@ static std::string build_query(const std::vector<std::pair<std::string, std::str
 void QobuzStream::runTask() {
   if (cfg_.api_token.token.empty()) {
     if (!login()) {
-      BELL_LOG(error, "QOBUZ", "Qobuz login failed");
+      SC32_LOG(error, "Qobuz login failed");
       return;
     }
   }
@@ -53,7 +53,8 @@ void QobuzStream::runTask() {
       };
       if (!cfg_.userAuthToken.empty()) {
         headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
-      } else if (!cfg_.api_token.token.empty()) {
+      }
+      else if (!cfg_.api_token.token.empty()) {
         headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
       }
       if (sign) return qobuzGet(cfg_.api_base, object,
@@ -84,7 +85,8 @@ void QobuzStream::runTask() {
       };
       if (!cfg_.userAuthToken.empty()) {
         headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
-      } else if (!cfg_.api_token.token.empty()) {
+      }
+      else if (!cfg_.api_token.token.empty()) {
         headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
       }
       if (body.empty()) {
@@ -109,6 +111,9 @@ void QobuzStream::runTask() {
     });
   player_->onGet(onQobuzGet);
   player_->onPost(onQobuzPost);
+  player_->onUiMessage_ = [this](const std::string& msg) {
+    onUiMessage_(msg);
+    };
 
   if (cfg_.appSecret.empty() || !open("64868955")) {
     QobuzConfig::ClientAppSecrets secrets;
@@ -130,7 +135,6 @@ void QobuzStream::runTask() {
 
   wsManager = std::make_unique<WsManager>([&]() { return getWSToken(); });
   wsManager->onAuth([this]() {
-    BELL_LOG(info, "qws", "OPENED");
     WSRegisterController();
     });
   wsManager->onPayload([this](std::vector<uint8_t> data) {
@@ -139,11 +143,12 @@ void QobuzStream::runTask() {
   wsManager->startTask();
   queue_->startTask();
   token_hb_ = std::make_unique<Heartbeat>([&]() {
-    if(cfg_.userAuthToken.empty()) {
-      if(cfg_.api_token.expiresAt <= timesync::now_ms() + 60000) {
+    if (cfg_.userAuthToken.empty()) {
+      if (cfg_.api_token.expiresAt <= timesync::now_ms() + 60000) {
         refreshApiToken();
       }
-    } else if(cfg_.XsessionId.expiresAt <= timesync::now_ms() + 60000) {
+    }
+    else if (cfg_.XsessionId.expiresAt <= timesync::now_ms() + 60000) {
       startSession();
     }
     }, 30000);
@@ -152,8 +157,8 @@ void QobuzStream::runTask() {
 
 bool QobuzStream::login() {
   if (cfg_.appId.empty()) return false;
-  BELL_LOG(info, "Qobuz", "Qobuz login: %s", cfg_.email.c_str());
-  BELL_LOG(info, "Qobuz", "Qobuz appId: %s", cfg_.appId.c_str());
+  SC32_LOG(info, "Qobuz login: %s", cfg_.email.c_str());
+  SC32_LOG(info, "Qobuz appId: %s", cfg_.appId.c_str());
   const std::string url = cfg_.api_base + "/user/login?" + build_query({
     {"email", cfg_.email}, {"password", cfg_.password}, {"app_id", cfg_.appId}
     });
@@ -168,15 +173,15 @@ bool QobuzStream::login() {
 
   auto json = nlohmann::json::parse(body);
 
-  BELL_LOG(info, "Qobuz", "Qobuz login response: %s", json.dump(2).c_str());
+  SC32_LOG(info, "Qobuz login response: %s", json.dump(2).c_str());
   cfg_.userAuthToken = json.at("user_auth_token").get<std::string>();
   if (json.find("user") == json.end())
-    BELL_LOG(error, "Qobuz", "Qobuz login failed: %s", json.dump(2).c_str());
+    SC32_LOG(error, "Qobuz login failed: %s", json.dump(2).c_str());
   if (json["user"].find("id") == json["user"].end())
-    BELL_LOG(error, "Qobuz", "Qobuz get user failed: %s", json.dump(2).c_str());
+    SC32_LOG(error, "Qobuz get user failed: %s", json.dump(2).c_str());
   cfg_.userId = std::to_string(json["user"]["id"].get<int>());
   player_->user_id_ = cfg_.userId;
-  BELL_LOG(info, "Qobuz", "Qobuz login finished with app_id: %s and user_auth_token: %s", cfg_.appId.c_str(), cfg_.userAuthToken.c_str());
+  SC32_LOG(info, "Qobuz login finished with app_id: %s and user_auth_token: %s", cfg_.appId.c_str(), cfg_.userAuthToken.c_str());
   return !cfg_.userAuthToken.empty();
 }
 
@@ -192,15 +197,15 @@ bool QobuzStream::refreshApiToken() {
   auto resp = qobuzPost(cfg_.api_base, "qws", "refreshToken", headers, "jwt=jwt_api");
   if (resp->status() == 200) {
     std::string body = resp->body_string();
-    BELL_LOG(info, "Qobuz", "Qobuz token: %s", body.c_str());
+    SC32_LOG(info, "Qobuz token: %s", body.c_str());
     nlohmann::json j = nlohmann::json::parse(body);
     cfg_.api_token.token = j["jwt_api"]["jwt"];
     cfg_.api_token.expiresAt = j["jwt_api"]["exp"].get<uint64_t>() * 1000;
   }
   else {
-    BELL_LOG(info, "Qobuz", "Qobuz token: %s", resp->body_string().c_str());
+    SC32_LOG(info, "Qobuz token: %s", resp->body_string().c_str());
     return false;
-  }  
+  }
   return true;
 }
 
@@ -261,10 +266,6 @@ std::unique_ptr<bell::HTTPClient::Response> QobuzStream::qobuzPost(
 WSToken QobuzStream::getWSToken() {
   WSToken token = cfg_.ws_token;
   if (cfg_.userAuthToken.empty() && token.jwt.empty()) return token;
-  if (token.exp_s != 0 && token.exp_s > timesync::now_s() + 60) {
-    BELL_LOG(info, "Qobuz", "Qobuz existing token valid");
-    return token;
-  }
   HTTPClient::Headers headers = {
     {"Referer", "https://play.qobuz.com/"},
     {"Content-Type", "application/x-www-form-urlencoded"},
@@ -272,13 +273,14 @@ WSToken QobuzStream::getWSToken() {
     {"X-App-Id", cfg_.appId},
     {"X-Session-Id", cfg_.XsessionId.token},
   };
-  if(!cfg_.userAuthToken.empty()) {
+  if (!cfg_.userAuthToken.empty()) {
     headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
-  } else if (!cfg_.api_token.token.empty()) {
+  }
+  else if (!cfg_.api_token.token.empty()) {
     headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
   }
   std::string endpoint;
-  if(cfg_.ws_token.jwt.empty()) endpoint = "createToken";
+  if (cfg_.ws_token.jwt.empty()) endpoint = "createToken";
   else endpoint = "refreshToken";
   auto resp = qobuzPost(cfg_.api_base, "qws", endpoint, headers, "jwt=jwt_qws");
   if (resp->status() == 200) {
@@ -289,23 +291,14 @@ WSToken QobuzStream::getWSToken() {
     token.endpoint = URLParser::urlDecode(j["jwt_qws"]["endpoint"]);
   }
   else {
-    BELL_LOG(info, "Qobuz", "Qobuz token: %s", resp->body_string().c_str());
+    SC32_LOG(info, "Qobuz token: %s", resp->body_string().c_str());
   }
-  
+
   return token;
 }
 
 bool QobuzStream::startSession() {
-  BELL_LOG(info, "Qobuz", "Qobuz start session");
-  if (cfg_.XsessionId.token.size() && !cfg_.XsessionId.expiresAt) {
-    BELL_LOG(info, "Qobuz", "Qobuz session Id has no expiry");
-    return true;
-  }
   if (cfg_.userAuthToken.empty() && cfg_.api_token.token.empty()) return false;
-  if (cfg_.XsessionId.expiresAt > timesync::now_ms() + 60000) {
-    BELL_LOG(info, "Qobuz", "Qobuz existing session valid");
-    return true;
-  }
   timesync::wait_until_valid(8000);
 
   const std::string ts_text = timesync::now_s_text(6);
@@ -328,39 +321,40 @@ bool QobuzStream::startSession() {
     {"Origin", "https://play.qobuz.com"},
     {"X-App-Id", cfg_.appId},
   };
-  if(!cfg_.userAuthToken.empty()) {
+  if (!cfg_.userAuthToken.empty()) {
     headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
-  } else if (!cfg_.api_token.token.empty()) {
+  }
+  else if (!cfg_.api_token.token.empty()) {
     headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
   }
   auto resp = qobuzPost(cfg_.api_base, "session", endpoint, headers, body);
   if (resp->status() != 200) {
-    BELL_LOG(info, "Qobuz", "Qobuz start: %s", resp->body_string().c_str());
+    SC32_LOG(info, "Qobuz start: %s", resp->body_string().c_str());
     return false;
   }
   else {
     nlohmann::json j = nlohmann::json::parse(resp->body_string());
     cfg_.XsessionId.token = j["session_id"];
     cfg_.XsessionId.expiresAt = j["expires_at"];
-    BELL_LOG(info, "Qobuz", "Qobuz start: expires_at: %llu", cfg_.XsessionId.expiresAt);
+    SC32_LOG(info, "Qobuz start: expires_at: %llu", cfg_.XsessionId.expiresAt);
     cfg_.XsessionId.expiresAt *= 1000;
-    BELL_LOG(info, "Qobuz", "Qobuz start: session_id: %s", cfg_.XsessionId.token.c_str());
-    BELL_LOG(info, "Qobuz", "Qobuz start: expires_at: %llu", cfg_.XsessionId.expiresAt);
+    SC32_LOG(info, "Qobuz start: session_id: %s", cfg_.XsessionId.token.c_str());
+    SC32_LOG(info, "Qobuz start: expires_at: %llu", cfg_.XsessionId.expiresAt);
     cfg_.infos = j["infos"];
 
-    BELL_LOG(info, "Qobuz", "Qobuz start: session_id: %s", cfg_.XsessionId.token.c_str());
-    BELL_LOG(info, "Qobuz", "Qobuz start: infos: %s", cfg_.infos.c_str());
+    SC32_LOG(info, "Qobuz start: session_id: %s", cfg_.XsessionId.token.c_str());
+    SC32_LOG(info, "Qobuz start: infos: %s", cfg_.infos.c_str());
   }
   return true;
 }
 
 bool QobuzStream::open(const std::string& trackId) {
-  if(cfg_.appSecret.empty()) return false;
+  if (cfg_.appSecret.empty()) return false;
   timesync::wait_until_valid(8000);
   const std::string ts_text = timesync::now_s_text(6);
 
   const std::vector<std::pair<std::string, std::string>> params = {
-    {"format_id", std::to_string(cfg_.audioFormat)},
+    {"format_id", "5"},
     {"intent", "stream"},
     {"track_id", trackId}
   };
@@ -371,14 +365,15 @@ bool QobuzStream::open(const std::string& trackId) {
   };
   if (!cfg_.userAuthToken.empty()) {
     headers.push_back({ "X-User-Auth-Token", cfg_.userAuthToken });
-  } else if (!cfg_.api_token.token.empty()) {
+  }
+  else if (!cfg_.api_token.token.empty()) {
     headers.push_back({ "Authorization", "Bearer " + cfg_.api_token.token });
   }
 
   auto resp = qobuzGet(cfg_.api_base, "track", "getFileUrl", headers, params, ts_text, cfg_.appSecret);
   if (resp->status() != 200) {
-    BELL_LOG(info, "Qobuz", "Qobuz open: %s", resp->body_string().c_str());
-    BELL_LOG(info, "Qobuz", "Qobuz open: %d", resp->status());
+    SC32_LOG(info, "Qobuz open: %s", resp->body_string().c_str());
+    SC32_LOG(info, "Qobuz open: %d", resp->status());
     return false;
   }
   auto body = resp->body_string();
@@ -407,59 +402,93 @@ void QobuzStream::WSRegisterController() {
 
 void QobuzStream::WSDecodePayload(std::vector<uint8_t> data) {
 
-  qconnect_Payload res = pbDecode<qconnect_Payload>(qconnect_Payload_fields, data);
+  qconnect_Payload res = qconnect_Payload_init_default;
+  if (!pbDecode(res, qconnect_Payload_fields, data)) {
+    SC32_LOG(error, "Failed to decode payload");
+    for (int i = 0; i < data.size(); i++) {
+      printf("%02x ", data[i]);
+    }
+    printf("\n");
+  }
 
   if (res.payload != NULL) {
-    auto payload_ = pbDecode<qconnect_QConnectBatch>(qconnect_QConnectBatch_fields, res.payload);
-    for (int i = 0; i < payload_.messages_count; i++) {
-      WSDecodeMessage(&payload_.messages[i]);
+    qconnect_QConnectBatch batch = qconnect_QConnectBatch_init_default;
+    if (!pbDecode(batch, qconnect_QConnectBatch_fields, res.payload)) {
+      SC32_LOG(error, "Failed to decode batch");
+      for (int i = 0; i < data.size(); i++) {
+        printf("%02x ", data[i]);
+      }
+      printf("\n");
     }
-    pb_release(qconnect_QConnectBatch_fields, &payload_);
+    for (int i = 0; i < batch.messages_count; i++) {
+      WSDecodeMessage(&batch.messages[i]);
+    }
+    pb_release(qconnect_QConnectBatch_fields, &batch);
   }
   pb_release(qconnect_Payload_fields, &res);
 }
-
+uint64_t current_missmatch = 0;
 void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
   switch (data->messageType)
   {
   case qconnect_QConnectMessageType_MESSAGE_TYPE_ERROR:
-    BELL_LOG(error, "qws", "Error message received");
-    BELL_LOG(error, "qws", "Error code: %s", data->error.code);
-    BELL_LOG(error, "qws", "Error description: %s", data->error.message);
+    SC32_LOG(error, "Error message received");
+    SC32_LOG(error, "Error code: %s", data->error.code);
+    SC32_LOG(error, "Error description: %s", data->error.message);
+    if (strcmp(data->error.message, "Current track not found in queue nor autoplay") == 0) {
+      if (current_missmatch != player_->getCurrentTrack()->id) {
+        current_missmatch = player_->getCurrentTrack()->id;
+        player_->setTracks();
+      }
+      else {
+        player_->stopTrack();
+      }
+    }
     break;
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_RNDR_SET_ACTIVE:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_ERROR_MESSAGE: {
+    if (!data->has_srvrCtrlQueueErrorMessage) break;
+    SC32_LOG(error, "Queue error message received");
+    SC32_LOG(error, "Error code: %s", data->srvrCtrlQueueErrorMessage.error.code);
+    SC32_LOG(error, "Error description: %s", data->srvrCtrlQueueErrorMessage.error.message);
+    if (strcmp(data->srvrCtrlQueueErrorMessage.error.message, "Queue version mismatch") == 0) {
+      queue_->queueuState.queueVersion = data->srvrCtrlQueueErrorMessage.queueVersion;
+      queue_->getSuggestions();
+    }
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_ADD_RENDERER:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_RNDR_SET_ACTIVE: {
+    break;
+  }
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_ADD_RENDERER: {
     if (!data->has_srvrCtrlAddRenderer) break;
     if (std::equal(
       data->srvrCtrlAddRenderer.renderer.deviceUuid->bytes,
       data->srvrCtrlAddRenderer.renderer.deviceUuid->bytes +
       data->srvrCtrlAddRenderer.renderer.deviceUuid->size,
       cfg_.session_id.raw)) {
-      BELL_LOG(info, "qws", "RendererId %ull", data->srvrCtrlAddRenderer.rendererId);
+      SC32_LOG(info, "RendererId %llu", data->srvrCtrlAddRenderer.rendererId);
       cfg_.rendererId = data->srvrCtrlAddRenderer.rendererId;
-      if (isActive_.load() && !player_->isRunning()) {
+      if (isActive_.load()) {
         WSSetRendererActive();
         WSSetRendererVolume();
       }
     }
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE: {
     if (!data->has_srvrCtrlSessionState) break;
     queue_->queueuState.queueVersion = data->srvrCtrlSessionState.queueVersion;
-    PB_MOVE_ASSIGN(qconnect_SrvrCtrlSessionState, player_->sessionState_, data->srvrCtrlSessionState);
+    current_session_id = data->srvrCtrlSessionState.sessionId;
     WSAskForQueueState();
     WSAskForRendererState();
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_ACTIVE_RENDERER_CHANGED:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_ACTIVE_RENDERER_CHANGED: {
     if (!data->has_srvrCtrlActiveRendererChanged) break;
-    BELL_LOG(info, "qws", "Active renderer changed to %llu", data->srvrCtrlActiveRendererChanged.rendererId);
+    SC32_LOG(info, "Active renderer changed to %llu", data->srvrCtrlActiveRendererChanged.rendererId);
     if (data->srvrCtrlActiveRendererChanged.rendererId == cfg_.rendererId) {
       if (!player_->isRunning()) {
-        if(!isActive_.load()){
+        if (!isActive_.load()) {
           WSSetRendererActive();
           WSSetRendererVolume();
           this->player_->startTask();
@@ -469,15 +498,12 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
       }
     }
     else if (player_->isRunning()) {
-      this->player_->stopTask();
-      isActive_.store(false);
-      // TODO destroy all or stay logged in?
+      stop();
     }
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_STATE:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_STATE: {
     if (!data->has_srvrCtrlQueueState) break;
-    player_->sessionState_.queueVersion = data->srvrCtrlQueueState.queueVersion;
     queue_->consumeQueueState(data->srvrCtrlQueueState);
     break;
   case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_SHUFFLE_MODE_SET:
@@ -486,7 +512,7 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
       WSAskForRendererState();
     }
     else {
-      BELL_LOG(info, "qws", "Shuffle mode set message without content");
+      SC32_LOG(info, "Shuffle mode set message without content");
       queue_->addShuffleIndexes(queue_->getRegularTracksSize());
       if (player_->isRunning()) {
         queue_->setIndex(player_->getCurrentTrack()->index);
@@ -494,12 +520,11 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
     }
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_LOADED:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_LOADED: {
     if (!data->has_srvrCtrlQueueTracksLoaded) break;
-    BELL_LOG(info, "qws", "Queue tracks loaded - Queue version %llu/%llu", data->srvrCtrlQueueTracksLoaded.queueVersion.major, data->srvrCtrlQueueTracksLoaded.queueVersion.minor);
+    SC32_LOG(info, "Queue tracks loaded - Queue version %llu/%llu", data->srvrCtrlQueueTracksLoaded.queueVersion.major, data->srvrCtrlQueueTracksLoaded.queueVersion.minor);
     queue_->deleteQobuzTracks();
     queue_->queueuState.queueVersion = data->srvrCtrlQueueTracksLoaded.queueVersion;
-    player_->sessionState_.queueVersion = data->srvrCtrlQueueTracksLoaded.queueVersion;
     WSAskForQueueState();
     WSAskForRendererState();
     queue_->addQobuzTracks(
@@ -514,7 +539,7 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
     }
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_INSERTED:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_INSERTED: {
     if (!data->has_srvrCtrlQueueTracksInserted) break;
     if (data->srvrCtrlQueueTracksInserted.autoplayReset) {
       queue_->deleteAutoplayTracks();
@@ -530,7 +555,7 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
     queue_->addShuffleIndexes(data->srvrCtrlQueueTracksInserted.tracks_count, insertIndex);
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_ADDED:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_ADDED: {
     if (!data->has_srvrCtrlQueueTracksAdded) break;
     if (data->srvrCtrlQueueTracksAdded.autoplayReset) {
       queue_->deleteAutoplayTracks();
@@ -544,7 +569,7 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
     queue_->addShuffleIndexes(queue_->getRegularTracksSize() + data->srvrCtrlQueueTracksAdded.tracks_count);
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_REMOVED:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_REMOVED: {
     if (!data->has_srvrCtrlQueueTracksRemoved) break;
     queue_->deleteQobuzTracks(
       data->srvrCtrlQueueTracksRemoved.queueItemIds,
@@ -552,8 +577,17 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
     );
     break;
   }
-  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_AUTOPLAY_TRACKS_LOADED:{
+  case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_AUTOPLAY_TRACKS_LOADED: {
     if (!data->has_srvrCtrlAutoplayTracksLoaded) break;
+    if (sentLoadedTracks_.load()) {
+      sentLoadedTracks_.store(false);
+      queue_->updateQobuzTracks(
+        data->srvrCtrlAutoplayTracksLoaded.tracks,
+        data->srvrCtrlAutoplayTracksLoaded.tracks_count,
+        data->srvrCtrlAutoplayTracksLoaded.contextUuid
+      );
+      break;
+    }
     queue_->deleteAutoplayTracks();
     queue_->addQobuzTracks(
       data->srvrCtrlAutoplayTracksLoaded.tracks,
@@ -601,6 +635,7 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
         queue_->setStartAt(data->srvrCtrlRendererStateUpdated.state.currentPosition.value);
         this->player_->startTask();
       }
+      //queue_->queueuState.queueVersion = data->srvrCtrlRendererStateUpdated.state.
     }
     else {
       queue_->setIndex(data->srvrCtrlRendererStateUpdated.state.currentQueueIndex);
@@ -612,7 +647,6 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
     if (!data->has_srvrRndrSetState) break;
     qconnect_SrvrRndrSetState* state = &data->srvrRndrSetState;
     if (state->has_queueVersion) {
-      player_->sessionState_.queueVersion = state->queueVersion;
       queue_->queueuState.queueVersion = state->queueVersion;
     }
     if (player_->isRunning() || isActive_.load()) {
@@ -630,12 +664,12 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
           break;
         }
         else if (currentTrack && currentTrack->index == state->currentQueueItem.queueItemId) {
-          BELL_LOG(info, "qws", "current track %lu", state->currentQueueItem.queueItemId);
+          SC32_LOG(info, "current track %lu", state->currentQueueItem.queueItemId);
           queue_->setIndex(state->currentQueueItem);
           break;
         }
         else {
-          BELL_LOG(info, "qws", "current track %lu", state->currentQueueItem.queueItemId);
+          SC32_LOG(info, "current track %lu", state->currentQueueItem.queueItemId);
         }
         queue_->setIndex(state->currentQueueItem);
         player_->stopTrack();
@@ -675,11 +709,10 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
   case qconnect_QConnectMessageType_MESSAGE_TYPE_SRVR_CTRL_QUEUE_VERSION_CHANGED: {
     if (!data->has_srvrCtrlQueueVersionChanged) break;
     queue_->queueuState.queueVersion = data->srvrCtrlQueueVersionChanged.queueVersion;
-    player_->sessionState_.queueVersion = data->srvrCtrlQueueVersionChanged.queueVersion;
     break;
   }
   default:
-    BELL_LOG(info, "qws", "UNKNOWN PAYLOAD %d", data->messageType);
+    SC32_LOG(info, "UNKNOWN PAYLOAD %d", data->messageType);
     break;
   }
 }
@@ -712,7 +745,7 @@ void QobuzStream::WSAskForRendererState() {
   msg.has_messageType = true;
   msg.has_ctrlSrvrAskForRendererState = true;
   msg.ctrlSrvrAskForRendererState.has_sessionId = true;
-  msg.ctrlSrvrAskForRendererState.sessionId = player_->sessionState_.sessionId;
+  msg.ctrlSrvrAskForRendererState.sessionId = current_session_id;
   this->encodeBatches(&msg, 1);
 }
 

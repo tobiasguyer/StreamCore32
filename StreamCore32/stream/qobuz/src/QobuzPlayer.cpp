@@ -25,15 +25,15 @@ static inline void create_flac_metadata(
   uint8_t  bits_per_sample, // 4..32
   size_t total_samples, // 0 = unknown
   uint16_t block_size = 4096);
-static bool parse_flac_frame_header(bell::SocketStream& s,
+static bool parse_flac_frame_header(bell::HTTPClient::Response* s,
   const uint8_t* buf, size_t have_after_sync,
   uint32_t& sr, uint8_t& ch, uint8_t& bps, uint16_t& bs);
-static inline size_t fetch_flac_metadata(bell::SocketStream& s, uint8_t* dst, size_t n);
+static inline size_t fetch_flac_metadata(bell::HTTPClient::Response* s, uint8_t* dst, size_t n);
 static inline bool sync_ff_f8fb(const uint8_t* p, size_t n);
 //
 //---QobuzPlayer---
 QobuzPlayer::QobuzPlayer(std::shared_ptr<AudioControl> audio, std::shared_ptr<qobuz::QobuzQueue> queue)
-  : StreamBase("QobuzPlayer", audio, 1024 * 20, 4, 1, 1) {
+  : StreamBase("Qobuz_Player", audio, 1024 * 12, 4, 1, 1) {
   queue_ = queue;
   feed_->state_callback = [this](uint8_t st) {
     if (st == 1) {
@@ -52,11 +52,11 @@ QobuzPlayer::QobuzPlayer(std::shared_ptr<AudioControl> audio, std::shared_ptr<qo
       }
       sendPlayerState();
       if (hb_) hb_->delay();
-      if(resp->status() != 200) BELL_LOG(info, "QOBUZ", "reportStreamingStart %s", resp->body_string().c_str());
+      //if(resp->status() != 200) SC32_LOG(info, "reportStreamingStart %s", resp->body_string().c_str());
     }
     else if (st == 3) {
       player_state.playingState = qconnect_PlayingState_PLAYING_STATE_PAUSED;
-      player_state.currentPosition.value = timesync::now_ms() - player_state.currentPosition.timestamp;
+      player_state.currentPosition.value = timesync::now_ms() - player_state.currentPosition.timestamp + player_state.currentPosition.value;
       auto resp = on_qobuz_post_("track", "reportStreamingEndJson",
         build_end_event(current_track_playing, user_id_, (timesync::now_ms() - current_track_playing->startedPlayingAt) / 1000),
         {}, false);
@@ -65,13 +65,60 @@ QobuzPlayer::QobuzPlayer(std::shared_ptr<AudioControl> audio, std::shared_ptr<qo
     }
     else if (st == 7) {
       auto resp = on_qobuz_post_("track", "reportStreamingEndJson", build_end_event(current_track_playing, user_id_, (timesync::now_ms() - current_track_playing->startedPlayingAt) / 1000), {}, false);
-      if(resp->status() != 200) BELL_LOG(info, "QOBUZ", "reportStreamingEnd %s", resp->body_string().c_str());
+      if (resp->status() != 200) SC32_LOG(info, "reportStreamingEnd %s", resp->body_string().c_str());
+      SC32_LOG(info, "QobuzPlayer: track ended");
       if (hb_) hb_.reset();
+      SC32_LOG(info, "QobuzPlayer: heartbeat stopped");
     }
-    BELL_LOG(info, "QOBUZ", "Feed state changed to %d", st);
     if (onState_) onState_(st != 3 && st != 7);
+    if (onUiMessage_ && (st == 2 || st == 3)) {
+      uint64_t pos_ms = 0;
+      if (st == 2) {
+        pos_ms = timesync::now_ms() - player_state.currentPosition.timestamp + player_state.currentPosition.value;
+      }
+      else {
+        pos_ms = player_state.currentPosition.value;
+      }
+      nlohmann::json j;
+      j["type"] = "playback";
+      j["src"] = "Qobuz";
+      std::string s;
+      uint32_t sr;
+      switch (current_track_playing->format) {
+      case qobuz::AudioFormat::QOBUZ_QUEUE_FORMAT_MP3:
+        j["quality"] = "MP3 - 320kbps";
+        break;
+      case qobuz::AudioFormat::QOBUZ_QUEUE_FORMAT_FLAC_LOSSLESS:
+        [[fallthrough]];
+      case qobuz::AudioFormat::QOBUZ_QUEUE_FORMAT_FLAC_HI_RES_96:
+        [[fallthrough]];
+      case qobuz::AudioFormat::QOBUZ_QUEUE_FORMAT_FLAC_HI_RES_192:
+        s = "FLAC - ";
+        s += std::to_string(current_track_playing->bits_depth) + "-Bit / ";
+        sr = current_track_playing->sampling_rate / 1000;
+        s += std::to_string(sr);
+        sr *= 1000;
+        if (current_track_playing->sampling_rate - sr > 0) s += "." + std::to_string((current_track_playing->sampling_rate - sr) / 100);
+        s += "kHz";
+        j["quality"] = s;
+        break;
+      default:
+        j["quality"] = "Unknown";
+        break;
+      }
+      j["state"] = (int)(st == 2);
+      j["position_ms"] = pos_ms;
+      j["duration_ms"] = current_track_playing->durationMs;
+      j["track"] = {
+        {"title", current_track_playing->title},
+        {"artist", current_track_playing->artist.name},
+        {"album", current_track_playing->album.name},
+        {"image", current_track_playing->album.image.large_img}
+      };
+      onUiMessage_(j.dump());
+    }
     };
-  BELL_LOG(info, "QOBUZ", "QobuzPlayer created");
+  SC32_LOG(info, "QobuzPlayer created");
 }
 
 bool QobuzPlayer::getStreamInfo(std::string url, size_t& length, size_t& offset, qobuz::AudioFormat format, uint8_t* buffer) {
@@ -87,22 +134,23 @@ bool QobuzPlayer::getStreamInfo(std::string url, size_t& length, size_t& offset,
     auto crange = svToString(resp->header("content-range"));
     length = resp->totalLength();
     if (format >= qobuz::AudioFormat::QOBUZ_QUEUE_FORMAT_FLAC_LOSSLESS) {
-      if (!probeFlac(resp->stream(), length, buffer, offset)) break;
+      if (!probeFlac(resp.get(), length, buffer, offset)) break;
     }
-    BELL_LOG(info, "QOBUZ", "getStreamInfo length: %lu offset: %lu", length, offset);
-    if(resp->stream().isOpen()) {
+    SC32_LOG(info, "getStreamInfo length: %lu offset: %lu", length, offset);
+    if (resp->stream().isOpen()) {
       resp->drainBody();
       resp->stream().close();
     }
     return true;
   }
-  if(resp->stream().isOpen()) {
+  if (resp->stream().isOpen()) {
     resp->drainBody();
     resp->stream().close();
   }
   return false;
 }
 void QobuzPlayer::runTask() {
+  std::scoped_lock lock(isRunningMutex_);
   constexpr size_t BUF_CAP = 32 * 1024;
   constexpr size_t PULL_BYTES = 4 * 1024;
   constexpr size_t HEADROOM = 1 * 1024;
@@ -142,8 +190,8 @@ void QobuzPlayer::runTask() {
       if (retries == 1) current_track_buffering->format = qobuz::AudioFormat::QOBUZ_QUEUE_FORMAT_MP3;
       else if (current_track_buffering->format > qobuz::AudioFormat::QOBUZ_QUEUE_FORMAT_FLAC_LOSSLESS) current_track_buffering->format = qobuz::AudioFormat::QOBUZ_QUEUE_FORMAT_FLAC_LOSSLESS;
       queue_->getFileUrl(current_track_buffering);
-      BELL_LOG(info, "QOBUZ", "restarting (retries %d)", retries);
-        BELL_YIELD();
+      SC32_LOG(info, "restarting (retries %d)", retries);
+      BELL_YIELD();
     }
     else {
       current_track_buffering = queue_->consumeTrack(current_track_buffering, player_state.nextQueueItemId);
@@ -171,10 +219,10 @@ void QobuzPlayer::runTask() {
       initial_seek = true;
     }
     std::string url = current_track_buffering->fileUrl;
-    if (url.empty()) { BELL_LOG(error, "QOBUZ", "empty URL"); isRunning_.store(false); return; }
+    if (url.empty()) { SC32_LOG(error, "empty URL"); isRunning_.store(false); return; }
 
     auto buf = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[BUF_CAP]);
-    if (!buf) { BELL_LOG(error, "QOBUZ", "OOM"); isRunning_.store(false); return; }
+    if (!buf) { SC32_LOG(error, "OOM"); isRunning_.store(false); return; }
 
     size_t in_len = 0, out_pos = 0;
     size_t n = 0;
@@ -183,8 +231,8 @@ void QobuzPlayer::runTask() {
 
     uint8_t flac_header[42];
     if (!getStreamInfo(url, totalSize_, baseOffset_, current_track_buffering->format, flac_header)) {
-      BELL_LOG(error, "QOBUZ", "failed to get track info");
-        BELL_YIELD();
+      SC32_LOG(error, "failed to get track info");
+      BELL_YIELD();
       retries--;
       continue;
     }
@@ -201,7 +249,7 @@ void QobuzPlayer::runTask() {
       // External seek
       if (current_track_buffering->wantSkip_.load()) {
         size_t newN = current_track_buffering->skipTo_.load();
-        BELL_LOG(info, "QOBUZ", "seek to %lu", newN);
+        SC32_LOG(info, "seek to %lu", newN);
         player_state.currentPosition.value = newN;
         player_state.currentPosition.timestamp = timesync::now_ms();
         if (newN) {
@@ -214,16 +262,16 @@ void QobuzPlayer::runTask() {
         }
         resp = open_at(url, newN + baseOffset_);
         if (!resp || !resp->stream().isOpen()) {
-          BELL_LOG(error, "QOBUZ", "resume at %lu failed", newN);
-        BELL_YIELD();
+          SC32_LOG(error, "resume at %lu failed", newN);
+          BELL_YIELD();
           current_track_buffering->wantSkip_.store(false);
           abortTrack = true; break;
         }
         int st2 = resp->status();
         if (st2 != 206 && st2 != 200) {
           if (st2 == 416) { eofSeen_.store(true); }
-          else BELL_LOG(error, "QOBUZ", "resume HTTP %d", st2);
-        BELL_YIELD();
+          else SC32_LOG(error, "resume HTTP %d", st2);
+          BELL_YIELD();
           current_track_buffering->wantSkip_.store(false);
           abortTrack = true; break;
         }
@@ -268,7 +316,7 @@ void QobuzPlayer::runTask() {
         size_t fileRemaining = (totalSize_ >= 0) ? (totalSize_ - n) : std::numeric_limits<size_t>::max();
         if (fileRemaining <= 0) {
           // Clean EOF (file consumed)
-        eofSeen_.store(true);
+          eofSeen_.store(true);
           targetUri_.clear();             // let outer loop advance to next track
           // drain and leave
           if (out_pos >= in_len) break;
@@ -295,47 +343,47 @@ void QobuzPlayer::runTask() {
           else {
             // resume from logical byte n (CDN offset = baseOffset_ + n)
             resp = open_at(url, n + baseOffset_);
-            if (!resp || !resp->stream().isOpen()) { BELL_LOG(error, "QOBUZ", "resume failed"); abortTrack = true; break; }
+            if (!resp || !resp->stream().isOpen()) { SC32_LOG(error, "resume failed"); abortTrack = true; break; }
             int st3 = resp->status();
             if (st3 == 416) { eofSeen_.store(true); targetUri_.clear(); if (out_pos >= in_len) break; }
-            else if (st3 != 206 && st3 != 200) { BELL_LOG(error, "QOBUZ", "resume HTTP %d", st3); abortTrack = true; break; }
+            else if (st3 != 206 && st3 != 200) { SC32_LOG(error, "resume HTTP %d", st3); abortTrack = true; break; }
             respRemaining = totalSize_ - n;
             if (respRemaining <= 0) respRemaining = std::numeric_limits<size_t>::max();
             BELL_YIELD();
           }
           continue;
         }
+        if (!resp->stream().isOpen()) {
+          resp = open_at(url, n + baseOffset_);
+        }
 
         size_t got = 0;
         try {
-          got = resp->stream().readExact(reinterpret_cast<char*>(buf.get() + in_len), to_read, 100);
+          got = resp->readExact(buf.get() + in_len, to_read, 100);
         }
         catch (...) {
-          BELL_LOG(error, "QOBUZ", "readSome threw");
+          SC32_LOG(error, "readSome threw");
           if (resp->stream().isOpen()) {
             resp->drainBody();
             resp->stream().close();
           }
           abortTrack = true;
-        break;
-      }
-        if (got == 0) {
-          // peer closed early → mark body finished; next loop handles EOF/resume
-          respRemaining = 0;
-          continue;
+          break;
         }
-        else if (got != to_read) {
-          BELL_LOG(info, "QOBUZ",
-                   "short read got=%lu to_read=%lu respRemaining=%lu in_len=%lu buf_cap=%lu totalSize=%lu",
-                   got,
-                   (unsigned long)to_read,
-                   (unsigned long)respRemaining,
-                   (unsigned long)in_len,
-                   (unsigned long)BUF_CAP,
-                   (unsigned long)totalSize_);
+        if (got != to_read) {
+          SC32_LOG(info,
+            "short read got=%lu to_read=%lu respRemaining=%lu in_len=%lu buf_cap=%lu totalSize=%lu",
+            got,
+            (unsigned long)to_read,
+            (unsigned long)respRemaining,
+            (unsigned long)in_len,
+            (unsigned long)BUF_CAP,
+            (unsigned long)totalSize_);
           BELL_SLEEP_MS(5);
+          resp->drainBody();
+          resp->stream().close();
         }
-          //respRemaining = got;
+        //respRemaining = got;
         in_len += (size_t)got;
         if (respRemaining != std::numeric_limits<size_t>::max())
           respRemaining -= (size_t)got;
@@ -355,7 +403,7 @@ void QobuzPlayer::runTask() {
     else if (eofMode_.load()) retries = 0;
   } // outer while
   feed_->feedCommand(AudioControl::DISC, 0);
-  BELL_LOG(info, "QOBUZ", "EOF seen: %d", eofSeen_.load());
+  while (hb_) BELL_SLEEP_MS(100);
   isRunning_.store(false);
 }
 
@@ -376,15 +424,15 @@ void QobuzPlayer::sendPlayerState() {
   on_ws_msg_(&msg, 1);
 }
 
-bool QobuzPlayer::probeFlac(bell::SocketStream& s, size_t n, uint8_t* dst, size_t& offset)
+bool QobuzPlayer::probeFlac(bell::HTTPClient::Response* s, size_t n, uint8_t* dst, size_t& offset)
 {
   constexpr size_t WIN = PROBE_MAX;     // 1024
   constexpr size_t OVERLAP = 14;
   constexpr size_t STEP = WIN - OVERLAP; // 1010
   constexpr size_t MAX_EXTRA = 3072;
   uint8_t fileHeader[4];
-  size_t filled = s.readExact(reinterpret_cast<char*>(fileHeader), 4);
-  if (filled != 4) { BELL_LOG(info, "qobuz", "probe short %lu", filled); return false; }
+  size_t filled = s->readExact(fileHeader, 4);
+  if (filled != 4) { SC32_LOG(info, "probe short %lu", filled); return false; }
   // functional flac header
   if (memcmp(fileHeader, "fLaC", 4) == 0) {
     filled += fetch_flac_metadata(s, dst, n);
@@ -394,8 +442,8 @@ bool QobuzPlayer::probeFlac(bell::SocketStream& s, size_t n, uint8_t* dst, size_
 
   uint8_t probe[WIN];
   memcpy(probe, fileHeader, 4);
-  filled += s.readExact(reinterpret_cast<char*>(probe + 4), WIN - 4);
-  if (filled != WIN) { BELL_LOG(info, "qobuz", "probe short %lu", filled); return false; }
+  filled += s->readExact(probe + 4, WIN - 4);
+  if (filled != WIN) { SC32_LOG(info, "probe short %lu", filled); return false; }
 
   auto find_sync = [&](const uint8_t* p, size_t n)->int {
     for (size_t i = 0;i + 2 <= n;++i) if (sync_ff_f8fb(p + i, n - i)) return (int)i;
@@ -418,12 +466,12 @@ bool QobuzPlayer::probeFlac(bell::SocketStream& s, size_t n, uint8_t* dst, size_
 
       size_t total_samples = 0; // unknown is fine
       create_flac_metadata(dst, sr, ch ? ch : 2, bps, total_samples, bs ? bs : 4096);
-      BELL_LOG(info, "qobuz", "flac sr %u ch %u bps %u bs %u", sr, ch, bps, bs);
+      SC32_LOG(info, "flac sr %u ch %u bps %u bs %u", sr, ch, bps, bs);
       offset = base_abs + (size_t)at;
       return true;
     }
 
-    if (extra >= MAX_EXTRA) { BELL_LOG(info, "qobuz", "no sync within budget"); return false; }
+    if (extra >= MAX_EXTRA) { SC32_LOG(info, "no sync within budget"); return false; }
 
     // slide 14B, read next chunk
     memmove(probe, probe + (WIN - OVERLAP), OVERLAP);
@@ -431,7 +479,7 @@ bool QobuzPlayer::probeFlac(bell::SocketStream& s, size_t n, uint8_t* dst, size_
     filled = OVERLAP;
 
     size_t want = std::min(STEP, MAX_EXTRA - extra);
-    size_t got = s.readExact(reinterpret_cast<char*>(probe + filled), want);
+    size_t got = s->readExact(probe + filled, want);
     if (got == 0) return false;
     filled += got;
     extra += got;
@@ -561,7 +609,7 @@ static inline bool sync_ff_f8fb(const uint8_t* p, size_t n) {
 // Decode FLAC frame header fields needed for STREAMINFO.
 // Returns true if we got sr/ch/bps/blocksize.
 // Reads extra bytes from the socket if header uses extended SR/BS codes.
-static bool parse_flac_frame_header(bell::SocketStream& s,
+static bool parse_flac_frame_header(bell::HTTPClient::Response* s,
   const uint8_t* buf, size_t have_after_sync,
   uint32_t& sr, uint8_t& ch, uint8_t& bps, uint16_t& bs)
 {
@@ -612,7 +660,7 @@ static bool parse_flac_frame_header(bell::SocketStream& s,
     uint8_t ext;
     if (have_after_sync >= 4) ext = buf[4];
     else {
-      if (s.readExact(reinterpret_cast<char*>(&ext), 1) != 1) return false;
+      if (s->readExact(&ext, 1) != 1) return false;
     }
     bs = uint16_t(ext) + 1;
   } break;
@@ -622,7 +670,7 @@ static bool parse_flac_frame_header(bell::SocketStream& s,
     size_t have = (have_after_sync >= 5) ? std::min<size_t>(have_after_sync - 4, 2) : 0;
     if (have) memcpy(ext, buf + 4, have);
     if (have < need) {
-      if (s.readExact(reinterpret_cast<char*>(ext + have), need - have) != (int)(need - have)) return false;
+      if (s->readExact(ext + have, need - have) != (int)(need - have)) return false;
     }
     bs = (uint16_t(ext[0]) << 8 | ext[1]) + 1;
   } break;
@@ -649,30 +697,30 @@ static bool parse_flac_frame_header(bell::SocketStream& s,
     // find where the ext byte lives: it comes *after* the UTF-8 coded frame/sample number.
     // We don't need that number; just read forward one byte at a time until CRC8 would appear…
     // Pragmatic shortcut: read one byte now; most encoders put SR ext immediately after b3+UTF8(1).
-    if (s.readExact(reinterpret_cast<char*>(&x), 1) != 1) return false;
+    if (s->readExact(&x, 1) != 1) return false;
     sr = uint32_t(x) * 1000u;
   } break;
   case 13: { // 16-bit Hz
     uint8_t x[2];
-    if (s.readExact(reinterpret_cast<char*>(x), 2) != 2) return false;
+    if (s->readExact(x, 2) != 2) return false;
     sr = (uint32_t(x[0]) << 8) | x[1];
   } break;
   case 14: { // 16-bit (10*Hz)
     uint8_t x[2];
-    if (s.readExact(reinterpret_cast<char*>(x), 2) != 2) return false;
+    if (s->readExact(x, 2) != 2) return false;
     sr = ((uint32_t(x[0]) << 8) | x[1]) * 10u;
   } break;
   default: sr = 0; break; // from STREAMINFO / reserved
   }
   return true;
 }
-static inline size_t fetch_flac_metadata(bell::SocketStream& s, uint8_t* dst, size_t n) {
+static inline size_t fetch_flac_metadata(bell::HTTPClient::Response* s, uint8_t* dst, size_t n) {
   size_t bytesRead = 0;
   bool isLast = false;
   while (!isLast && bytesRead < n) {
     uint8_t bh[4];
-    size_t got = s.readExact(reinterpret_cast<char*>(bh), 4);
-    if (got != 4) { BELL_LOG(info, "qobuz", "probe short %lu", bytesRead); return false; }
+    size_t got = s->readExact(bh, 4);
+    if (got != 4) { SC32_LOG(info, "probe short %lu", bytesRead); return false; }
     bytesRead += got;
     isLast = bh[0] & 0x80;
     const uint8_t btype = bh[0] & 0x7f;
@@ -686,8 +734,8 @@ static inline size_t fetch_flac_metadata(bell::SocketStream& s, uint8_t* dst, si
         dst[4] = 0x80 | 0x00; // is_last = 1 | type = STREAMINFO
         dst[5] = 0x00; dst[6] = 0x00; dst[7] = 0x22; // 34 bytes
         uint8_t buf[bsize];
-        got = s.readExact(reinterpret_cast<char*>(buf), bsize);
-        if (got != bsize) { BELL_LOG(info, "qobuz", "probe short %lu", bytesRead); return false; }
+        got = s->readExact(buf, bsize);
+        if (got != bsize) { SC32_LOG(info, "probe short %lu", bytesRead); return false; }
         bytesRead += got;
         memcpy(dst + 8, buf, 34);
         break;
@@ -702,12 +750,12 @@ static inline size_t fetch_flac_metadata(bell::SocketStream& s, uint8_t* dst, si
       case 6: break; // PICTURE
       */
     default:
-      //BELL_LOG(info, "qobuz", "type %u size %u", btype, bsize);
+      //SC32_LOG(info, "type %u size %u", btype, bsize);
       while (bsize > 0) {
         size_t want = std::min((size_t)bsize, PROBE_MAX);
         uint8_t buf[want];
-        size_t got = s.readExact(reinterpret_cast<char*>(buf), want);
-        if (got != want) { BELL_LOG(info, "qobuz", "probe short %lu", bytesRead); return false; }
+        size_t got = s->readExact(buf, want);
+        if (got != want) { SC32_LOG(info, "probe short %lu", bytesRead); return false; }
         bytesRead += got;
         bsize -= want;
       }

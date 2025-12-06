@@ -1,13 +1,13 @@
 #include "EventManager.h"
 #include "SpotifyContext.h"  // for Context::ConfigState, Context (ptr o...
-#include "Logger.h"        // for SPOTIFY_LOG
+#include "Logger.h"        // for SC32_LOG
 #include "TrackQueue.h"
 
 using namespace spotify;
 
 static std::string reason_text[11] = {
     "trackdone", "trackerror", "fwdbtn",  "backbtn", "endplay", "playbtn",
-    "clickrow",  "logout",     "appload", "remote",  ""};
+    "clickrow",  "logout",     "appload", "remote",  "" };
 
 TrackMetrics::TrackMetrics(std::shared_ptr<spotify::Context> ctx, uint64_t pos) {
   this->ctx = ctx;
@@ -18,55 +18,56 @@ TrackMetrics::TrackMetrics(std::shared_ptr<spotify::Context> ctx, uint64_t pos) 
 void TrackMetrics::endInterval(uint64_t pos) {
   // end Interval
   currentInterval->length =
-      this->ctx->timeProvider->getSyncedTimestamp() - currentInterval->start;
+    this->ctx->timeProvider->getSyncedTimestamp() - currentInterval->start;
   currentInterval->end = currentInterval->position + currentInterval->length;
   totalAmountPlayed += currentInterval->length;
   // add skipped time
   if (pos != 0) {
     if (pos > currentInterval->position + currentInterval->length)
       skipped_forward.add(
-          pos - (currentInterval->position + currentInterval->length));
+        pos - (currentInterval->position + currentInterval->length));
     else
       skipped_backward.add(
-          (currentInterval->position + currentInterval->length) - pos);
+        (currentInterval->position + currentInterval->length) - pos);
   }
   if (currentInterval->length > longestInterval)
     longestInterval = currentInterval->length;
   intervals =
-      addInterval(intervals, {currentInterval->position, currentInterval->end});
+    addInterval(intervals, { currentInterval->position, currentInterval->end });
 }
 
 void TrackMetrics::pauseInterval(uint64_t pos, bool pause) {
   // end Interval
   if (pause) {
     currentInterval->length =
-        this->ctx->timeProvider->getSyncedTimestamp() - currentInterval->start;
+      this->ctx->timeProvider->getSyncedTimestamp() - currentInterval->start;
     currentInterval->end = currentInterval->position + currentInterval->length;
     totalAmountPlayed += currentInterval->length;
     // add skipped time
     if (pos != 0) {
       if (pos > currentInterval->position + currentInterval->length)
         skipped_forward.add(
-            pos - (currentInterval->position + currentInterval->length));
+          pos - (currentInterval->position + currentInterval->length));
       else
         skipped_backward.add(
-            (currentInterval->position + currentInterval->length) - pos);
+          (currentInterval->position + currentInterval->length) - pos);
     }
     if (currentInterval->length > longestInterval)
       longestInterval = currentInterval->length;
     intervals = addInterval(intervals,
-                            {currentInterval->position, currentInterval->end});
-  } else {
+      { currentInterval->position, currentInterval->end });
+  }
+  else {
     currentInterval = std::make_shared<TrackInterval>(
-        this->ctx->timeProvider->getSyncedTimestamp(), pos);
+      this->ctx->timeProvider->getSyncedTimestamp(), pos);
   }
 }
 
 uint64_t TrackMetrics::getPosition(bool paused) {
   return (currentInterval->position +
-          (paused ? currentInterval->length
-                  : (this->ctx->timeProvider->getSyncedTimestamp() -
-                     currentInterval->start)));
+    (paused ? currentInterval->length
+      : (this->ctx->timeProvider->getSyncedTimestamp() -
+        currentInterval->start)));
 }
 
 void TrackMetrics::startTrack() {
@@ -76,13 +77,13 @@ void TrackMetrics::startTrack() {
 
 void TrackMetrics::startTrackDecoding() {
   trackHeaderTime =
-      this->ctx->timeProvider->getSyncedTimestamp() - trackHeaderTime;
+    this->ctx->timeProvider->getSyncedTimestamp() - trackHeaderTime;
 }
 
 void TrackMetrics::startTrackPlaying(uint64_t pos) {
   trackLatency = this->ctx->timeProvider->getSyncedTimestamp() - audioKeyTime;
   currentInterval = std::make_shared<TrackInterval>(
-      this->ctx->timeProvider->getSyncedTimestamp(), pos);
+    this->ctx->timeProvider->getSyncedTimestamp(), pos);
 }
 
 void TrackMetrics::endTrack() {
@@ -90,7 +91,7 @@ void TrackMetrics::endTrack() {
   for (const auto& interval : intervals)
     totalMsOfPlayedTrack += interval.second - interval.first;
   totalAmountOfPlayTime =
-      this->ctx->timeProvider->getSyncedTimestamp() - timestamp;
+    this->ctx->timeProvider->getSyncedTimestamp() - timestamp;
 }
 
 void TrackMetrics::newPosition(uint64_t pos) {
@@ -98,7 +99,7 @@ void TrackMetrics::newPosition(uint64_t pos) {
     return;
   endInterval(pos);
   currentInterval = std::make_shared<TrackInterval>(
-      this->ctx->timeProvider->getSyncedTimestamp(), pos);
+    this->ctx->timeProvider->getSyncedTimestamp(), pos);
 }
 
 std::string PlaybackMetrics::get_source_from_context() {
@@ -117,7 +118,7 @@ std::string PlaybackMetrics::get_source_from_context() {
   return ".com.spotify.gaia";
 }
 
-void PlaybackMetrics::uri2context(std::string uri){
+void PlaybackMetrics::uri2context(std::string uri) {
   size_t pos = uri.find("station:");
   if (pos != std::string::npos) {
     uri.erase(pos, 8);  // Remove "station:" (8 characters)
@@ -141,111 +142,112 @@ std::vector<uint8_t> PlaybackMetrics::sendEvent(spotify::QueuedTrack* track) {
   append(&msg, "00000000000000000000000000000000");  //parent_playback_id
   append(&msg, start_source);
   append(
-      &msg,
-      reason_text[(uint8_t)start_reason]);  //remote when taken over by anyone
+    &msg,
+    reason_text[(uint8_t)start_reason]);  //remote when taken over by anyone
   append(
-      &msg,
-      end_source == ""
-          ? get_end_source()
-          : end_source);  //free-tier-artist / playlist / your_library .com.spotify.gaia / artist
+    &msg,
+    end_source == ""
+    ? get_end_source()
+    : end_source);  //free-tier-artist / playlist / your_library .com.spotify.gaia / artist
   append(&msg,
-         reason_text[(uint8_t)end_reason]);  //remote when taken over of anyone
+    reason_text[(uint8_t)end_reason]);  //remote when taken over of anyone
   append(
-      &msg,
-      std::to_string(
-          track
-              ->written_bytes));  //@librespot usually the same size as track->size, if shifted forward, usually shorter, if shifted backward, usually bigger
+    &msg,
+    std::to_string(
+      track
+      ->written_bytes));  //@librespot usually the same size as track->size, if shifted forward, usually shorter, if shifted backward, usually bigger
   append(&msg, std::to_string(track->trackMetrics->track_size));  //in bytes
   append(
-      &msg,
-      std::to_string(
-          track->trackMetrics
-              ->totalAmountOfPlayTime));  //total millis from start to end (sometimes a little longer than millis_played) pause has no influence
+    &msg,
+    std::to_string(
+      track->trackMetrics
+      ->totalAmountOfPlayTime));  //total millis from start to end (sometimes a little longer than millis_played) pause has no influence
   append(&msg,
-         std::to_string(
-             track->trackMetrics->totalAmountPlayed));  //total millis played
+    std::to_string(
+      track->trackMetrics->totalAmountPlayed));  //total millis played
   append(&msg,
-         std::to_string(track->trackInfo.duration));  //track duration in millis
+    std::to_string(track->trackInfo.duration));  //track duration in millis
   append(
-      &msg,
-      std::to_string(
-          track->trackMetrics
-              ->trackHeaderTime));  //total time of decrypting? often 3 or 4 when nothing played -1
+    &msg,
+    std::to_string(
+      track->trackMetrics
+      ->trackHeaderTime));  //total time of decrypting? often 3 or 4 when nothing played -1
   append(&msg, "0");  // fadeoverlapp? usually 0, but fading is set on
   append(
-      &msg,
-      "0");  // librespot says, could bee that the first value shows if it is the first played song, usually 0
+    &msg,
+    "0");  // librespot says, could bee that the first value shows if it is the first played song, usually 0
   append(&msg, "0");  //?? usually 0
   append(&msg, "0");  //?? usually 0
   append(&msg, std::to_string(track->trackMetrics->skipped_backward
-                                  .count));  //total times skipped backward
+    .count));  //total times skipped backward
   append(&msg,
-         std::to_string(track->trackMetrics->skipped_backward
-                            .amount));  //total amount of time skipped backward
+    std::to_string(track->trackMetrics->skipped_backward
+      .amount));  //total amount of time skipped backward
   append(&msg, std::to_string(track->trackMetrics->skipped_forward
-                                  .count));  //total times skipped forward
+    .count));  //total times skipped forward
   append(&msg,
-         std::to_string(track->trackMetrics->skipped_forward
-                            .amount));  //total amount of time skipped forward
+    std::to_string(track->trackMetrics->skipped_forward
+      .amount));  //total amount of time skipped forward
   append(
-      &msg,
-      std::to_string(
-          track->trackMetrics
-              ->trackLatency));  //randomNumber; biggest value so far 260, usually biggert than 1 //spotify says play latency
+    &msg,
+    std::to_string(
+      track->trackMetrics
+      ->trackLatency));  //randomNumber; biggest value so far 260, usually biggert than 1 //spotify says play latency
   append(&msg, "-1");  // usually -1, if paused positive, probablly in seconds
   append(&msg, "context");
   append(&msg, std::to_string(
-                   track->trackMetrics
-                       ->audioKeyTime));  //time to get the audiokey? usually -1
+    track->trackMetrics
+    ->audioKeyTime));  //time to get the audiokey? usually -1
   append(&msg, "0");                      // usually 0
   append(&msg, "1");  // @librespot audioKey preloaded? usually positive (1)
   append(&msg, "0");  //?? usually 0
   append(
-      &msg,
-      "0");  //?? usually bigger than 0, if startup(not playing) or takenover "0"
+    &msg,
+    "0");  //?? usually bigger than 0, if startup(not playing) or takenover "0"
   append(
-      &msg,
-      "1");  // usually 1 , if taken over 0, if player took over not from the start 0
+    &msg,
+    "1");  // usually 1 , if taken over 0, if player took over not from the start 0
   append(&msg,
-         std::to_string(
-             track->trackMetrics->longestInterval));  //length longest interval
+    std::to_string(
+      track->trackMetrics->longestInterval));  //length longest interval
   append(
-      &msg,
-      std::to_string(
-          track->trackMetrics
-              ->totalMsOfPlayedTrack));  //total time since start total millis of song played
+    &msg,
+    std::to_string(
+      track->trackMetrics
+      ->totalMsOfPlayedTrack));  //total time since start total millis of song played
   append(&msg, "0");                     //?? usually 0
   append(
-      &msg,
-      "320000");  //CONFIG_SPOTIFY_AUDIO_FORMAT ? CONFIG_SPOTIFY_AUDIO_FORMAT == 2 ? "320000" : "160000" : "96000"); // bitrate
-  if(track->trackInfo.provider =="autoplay"){
+    &msg,
+    "320000");  //CONFIG_SPOTIFY_AUDIO_FORMAT ? CONFIG_SPOTIFY_AUDIO_FORMAT == 2 ? "320000" : "160000" : "96000"); // bitrate
+  if (track->trackInfo.provider == "autoplay") {
     append(&msg, "");
-  } else {
+  }
+  else {
     append(&msg, context_uri);
   }
   append(&msg, "vorbis");
   append(&msg,
-      track->trackInfo
-          .trackId);  // sometimes, when commands come from outside, or else, this value is something else and the following one is the gid
+    track->trackInfo
+    .trackId);  // sometimes, when commands come from outside, or else, this value is something else and the following one is the gid
   append(&msg, "");
   append(&msg, "0");  //?? usually 0
   append(&msg,
-         std::to_string(track->trackMetrics
-                            ->timestamp));  // unix timestamp when track started
+    std::to_string(track->trackMetrics
+      ->timestamp));  // unix timestamp when track started
   append(&msg, "0");                        //?? usually 0
   append(&msg, track->trackInfo.provider);
   append(&msg,
-      (end_source == "playlist" || end_source == "your_library")
-          ? "your_library"
-          : "search");  //std::to_string(this->ctx->referrerIdentifier));//your_library:lybrary_header / autoplay:afterplaylist / search:found in search / find /home:found in home
+    (end_source == "playlist" || end_source == "your_library")
+    ? "your_library"
+    : "search");  //std::to_string(this->ctx->referrerIdentifier));//your_library:lybrary_header / autoplay:afterplaylist / search:found in search / find /home:found in home
   append(&msg,
-      "xpui_2024-05-31_1717155884878_");  //xpui_2024-05-31_1717155884878_ xpui_ + date of version(update) + _ + unix_timestamp probably of update //empty if autoplay
+    "xpui_2024-05-31_1717155884878_");  //xpui_2024-05-31_1717155884878_ xpui_ + date of version(update) + _ + unix_timestamp probably of update //empty if autoplay
   append(&msg, "com.spotify");
   append(&msg,
-      "none");  //"transition" : gapless if song ended beforehand inside player
+    "none");  //"transition" : gapless if song ended beforehand inside player
   append(&msg, "none");
   append(&msg,
-      "local");  // @librespot lastCommandSentByDeviceId , usually"local", if orderd from outside last command ident last comment ident from frame.state
+    "local");  // @librespot lastCommandSentByDeviceId , usually"local", if orderd from outside last command ident last comment ident from frame.state
   append(&msg, "na");
   append(&msg, "none");
   append(&msg, track->trackInfo.page_instance_id); //page-instance-id // changing , if radio / autoplay empty
@@ -265,10 +267,10 @@ std::vector<uint8_t> PlaybackMetrics::sendEvent(spotify::QueuedTrack* track) {
 
 #ifndef CONFIG_HIDDEN
 
-  auto parts = MercurySession::DataParts({msg});
+  auto parts = MercurySession::DataParts({ msg });
   // Execute the request
   ctx->session->execute(MercurySession::RequestType::POST, requestUrl,
-                      nullptr, parts);
+    nullptr, parts);
 #endif
   return msg;
 }

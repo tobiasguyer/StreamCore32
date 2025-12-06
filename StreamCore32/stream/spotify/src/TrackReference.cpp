@@ -14,31 +14,31 @@ bool TrackReference::operator==(const TrackReference& other) const {
 }
 
 bool TrackReference::pbEncodeProvidedTracks(pb_ostream_t* stream,
-                                            const pb_field_t* field,
-                                            void* const* arg) {
+  const pb_field_t* field,
+  void* const* arg) {
   auto trackPacket = (std::pair<uint8_t*, std::vector<player_proto_connect_ProvidedTrack>*>*)(*arg);
   if (*trackPacket->first >= trackPacket->second->size() ||
-      !trackPacket->second->size())
+    !trackPacket->second->size())
     return true;
   for (int i = *trackPacket->first; i < trackPacket->second->size(); i++) {
     if (!pb_encode_tag_for_field(stream, field)) {
       return false;
     }
     if (!pb_encode_submessage(stream, player_proto_connect_ProvidedTrack_fields,
-                              &(trackPacket->second->at(i))))
+      &(trackPacket->second->at(i))))
       return false;
     //if there's a delimiter, or the tracks are over the track treshhold
     if (trackPacket->second->at(i).removed != NULL ||
-        i - *trackPacket->first >= TRACK_SEND_LIMIT || stream->bytes_written >= 14000){
-          break;
-        }
+      i - *trackPacket->first >= TRACK_SEND_LIMIT || stream->bytes_written >= 14000) {
+      break;
+    }
   }
   return true;
 }
 
 bool TrackReference::pbDecodeProvidedTracks(pb_istream_t* stream,
-                                            const pb_field_t* field,
-                                            void** arg) {
+  const pb_field_t* field,
+  void** arg) {
   auto trackQueue = static_cast<std::vector<player_proto_connect_ProvidedTrack>*>(*arg);
 
   // Push a new reference

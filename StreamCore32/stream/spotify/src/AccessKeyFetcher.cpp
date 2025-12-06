@@ -9,7 +9,7 @@
 #include "BellLogger.h"    // for AbstractLogger
 #include "SpotifyContext.h"  // for Context
 #include "HTTPClient.h"
-#include "Logger.h"            // for SPOTIFY_LOG
+#include "Logger.h"            // for SC32_LOG
 #include "MercurySession.h"    // for MercurySession, MercurySession::Res...
 #include "NanoPBExtensions.h"  // for bell::nanopb::encode...
 #include "NanoPBHelper.h"      // for pbEncode and pbDecode
@@ -29,14 +29,15 @@
 using namespace spotify;
 
 static std::string CLIENT_ID =
-    "65b708073fc0480ea92a077233ca87bd";  // Spotify web client's client id
+"65b708073fc0480ea92a077233ca87bd";  // Spotify web client's client id
 
 static std::string SCOPES =
-    "streaming,user-library-read,user-library-modify,user-top-read,user-read-"
-    "recently-played";  // Required access scopes
+"streaming,user-library-read,user-library-modify,user-top-read,user-read-"
+"recently-played";  // Required access scopes
 
 AccessKeyFetcher::AccessKeyFetcher(std::shared_ptr<spotify::Context> ctx)
-    : ctx(ctx) {}
+  : ctx(ctx) {
+}
 
 bool AccessKeyFetcher::isExpired() {
   if (accessKey.empty()) {
@@ -82,7 +83,7 @@ void AccessKeyFetcher::updateAccessKey() {
   // Set login method to stored credential
   loginRequest.which_login_method = LoginRequest_stored_credential_tag;
   loginRequest.login_method.stored_credential.data.funcs.encode =
-      &bell::nanopb::encodeVector;
+    &bell::nanopb::encodeVector;
   loginRequest.login_method.stored_credential.data.arg = &ctx->config.authData;
 
   // Max retry of 3, can receive different hash cat types
@@ -91,13 +92,13 @@ void AccessKeyFetcher::updateAccessKey() {
 
   do {
     auto encodedRequest = pbEncode(LoginRequest_fields, &loginRequest);
-    SPOTIFY_LOG(info, "Access token expired, fetching new one... %d",
-              encodedRequest.size());
+    SC32_LOG(info, "Access token expired, fetching new one... %d",
+      encodedRequest.size());
 
     // Perform a login5 request, containing the encoded protobuf data
     auto response = bell::HTTPClient::post(
-        "https://login5.spotify.com/v3/login",
-        {{"Content-Type", "application/x-protobuf"}}, encodedRequest);
+      "https://login5.spotify.com/v3/login",
+      { {"Content-Type", "application/x-protobuf"} }, encodedRequest);
 
     auto responseBytes = response->bytes();
 
@@ -106,7 +107,7 @@ void AccessKeyFetcher::updateAccessKey() {
 
     if (loginResponse.which_response == LoginResponse_ok_tag) {
       // Successfully received an auth token
-      SPOTIFY_LOG(info, "Access token sucessfully fetched");
+      SC32_LOG(info, "Access token sucessfully fetched");
       success = true;
 
       accessKey = std::string(loginResponse.response.ok.access_token);
@@ -119,9 +120,10 @@ void AccessKeyFetcher::updateAccessKey() {
       }
 
       this->expiresAt =
-          ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
-    } else {
-      SPOTIFY_LOG(error, "Failed to fetch access token");
+        ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
+    }
+    else {
+      SC32_LOG(error, "Failed to fetch access token");
     }
 
     // Free up allocated memory for response

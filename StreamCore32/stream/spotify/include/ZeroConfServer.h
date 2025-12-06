@@ -12,11 +12,11 @@
 
 using namespace spotify;
 class ZeroconfAuthenticator {
- public:
-  ZeroconfAuthenticator(std::string name){
+public:
+  ZeroconfAuthenticator(std::string name) {
     blob = std::make_shared<spotify::LoginBlob>(name);
   };
-  ~ZeroconfAuthenticator(){};
+  ~ZeroconfAuthenticator() {};
 
   std::shared_ptr<spotify::LoginBlob> blob;
 
@@ -26,13 +26,13 @@ class ZeroconfAuthenticator {
   std::function<void()> onClose;
 
   void registerMdnsService() {
-    
+
     this->isRunning.store(true);
-    
+
     ZeroconfServiceManager::ServiceSpec spec;
-    spec.key         = "spotify";
+    spec.key = "spotify";
     spec.serviceType = "_spotify-connect";   // same as before
-    spec.proto       = "_tcp";
+    spec.proto = "_tcp";
     spec.instanceName = "StreamCore32";    // how it appears in mDNS
     spec.txt = {
       {"VERSION", "1.0"},
@@ -45,7 +45,7 @@ class ZeroconfAuthenticator {
       [this](mg_connection* c) -> std::string {
         return this->blob->buildZeroconfInfo();
       }
-    });
+      });
     spec.endpoints.push_back({
       ZeroconfServiceManager::HttpMethod::POST,
       "/spotify_info",
@@ -71,24 +71,24 @@ class ZeroconfAuthenticator {
             queryMap[hd[i].name] = hd[i].value;
           }
 
-          SPOTIFY_LOG(info, "Received zeroauth POST data");
+          SC32_LOG(info, "Received zeroauth POST data");
 
           // Pass user's credentials to the blob
           blob->loadZeroconfQuery(queryMap);
           onAuthSuccess(blob);
-          
+
         }
 
         return obj.dump();
       }
-    });
+      });
     spec.endpoints.push_back({
       ZeroconfServiceManager::HttpMethod::GET,
       "/close",
       [](mg_connection* c) -> std::string {
         return "";
       }
-    });
+      });
     zeroconf.addService(spec);
   }
   void unregisterMdnsService() {

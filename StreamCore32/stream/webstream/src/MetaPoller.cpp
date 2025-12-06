@@ -6,9 +6,10 @@ void MetaPoller::runTask() {
   wantStop_.store(false);
   using streamcore::helpers::genOriginVariants;
   constexpr size_t kMaxUrlsPerCycle = 12;
-  constexpr size_t kMaxAcceptBody = 512 * 1024;
+  constexpr size_t kMaxAcceptBody = 12 * 1024;
 
   while (isRunning_.load()) {
+    if (wantStop_.load()) { isRunning_.store(false); break; }
     if (!active_.load()) {
       StreamBase::sleepMs(200);
       continue;
@@ -101,7 +102,9 @@ void MetaPoller::runTask() {
                 title = pickIcecastTitle(s);
               }
             }
-            else if (src.is_object()) { title = pickIcecastTitle(src); }
+            else if (src.is_object()) {
+              title = pickIcecastTitle(src);
+            }
           }
         }
       }
@@ -121,7 +124,8 @@ void MetaPoller::runTask() {
           std::string a = j.value("artist", std::string());
           std::string t = j.value("track", std::string());
           if (!a.empty() && !t.empty()) title = a + " - " + t;
-          if (title.empty()) title = j.value("title", std::string());
+          else if (!t.empty()) title = t;
+          if (title.empty()) title = j.value("track", std::string());
         }
       }
 
@@ -132,7 +136,11 @@ void MetaPoller::runTask() {
       }
       StreamBase::sleepMs(25);
     }
-
+    if (title.empty() && lockedUrl_.empty()) {
+      active_.store(false);
+      lastTitle_.clear();
+      continue;
+    }
     if (!title.empty() && title != lastTitle_) {
       lastTitle_ = title;
       if (emit_) emit_(station, title);

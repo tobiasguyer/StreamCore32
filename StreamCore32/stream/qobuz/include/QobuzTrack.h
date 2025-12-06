@@ -51,25 +51,25 @@ namespace qobuz {
 
   class QobuzQueueTrack {
   public:
-    QobuzQueueTrack(qconnect_QueueTrackRef track) {
+    QobuzQueueTrack(qconnect_QueueTrackRef track, AudioFormat audioFormat = AudioFormat::QOBUZ_QUEUE_FORMAT_FLAC_LOSSLESS) {
       id = track.trackId;
       index = track.queueItemId;
       auto b = track.contextUuid->bytes;
-      if(track.contextUuid){
+      if (track.contextUuid) {
         contextUuid.resize(37);
         snprintf(contextUuid.data(), 37,
-      "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-      b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
-      b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
-      contextUuid.pop_back();
+          "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+          b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+          b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+        contextUuid.pop_back();
       }
-      BELL_LOG(info, "queue", "QobuzQueueTrack: contextUuid=%s", contextUuid.c_str());
+      format = audioFormat;
     };
     ~QobuzQueueTrack() {
     };
 
     // Requested output format
-    AudioFormat format = AudioFormat::QOBUZ_QUEUE_FORMAT_FLAC_LOSSLESS;
+    AudioFormat format;
 
     // Basic
     std::string title;
@@ -80,7 +80,7 @@ namespace qobuz {
     size_t durationMs = 0;
     size_t startMs = 0;
     uint64_t startedPlayingAt = 0;
-    size_t id = 0;
+    uint64_t id = 0;
     size_t index = 0;
     std::atomic<bool> wantSkip_{ false };
     std::atomic<long long> skipTo_{ 0 };
@@ -122,9 +122,9 @@ namespace qobuz {
     std::string contextJson() const {
       std::string cj = "{";
       cj += "\"track_id\":" + std::to_string(id) + ",";
-      if(artist.id > 0) cj += "\"artist_id\":" + std::to_string(artist.id) + ",";
-      if(album.label_id > 0) cj += "\"label_id\":" + std::to_string(album.label_id) + ",";
-      if(album.genre_id > 0) cj += "\"genre_id\":" + std::to_string(album.genre_id) + ",";
+      if (artist.id > 0) cj += "\"artist_id\":" + std::to_string(artist.id) + ",";
+      if (album.label_id > 0) cj += "\"label_id\":" + std::to_string(album.label_id) + ",";
+      if (album.genre_id > 0) cj += "\"genre_id\":" + std::to_string(album.genre_id) + ",";
       cj.pop_back();
       return cj + "}";
     }

@@ -5,7 +5,7 @@
 #include "nlohmann/json.hpp"
 #include "nlohmann/json_fwd.hpp"
 
-#include "BellLogger.h"
+#include "Logger.h"
 
 namespace qobuz {
   bool QobuzQueue::getMetadata(std::shared_ptr<QobuzQueueTrack> track) {
@@ -17,7 +17,7 @@ namespace qobuz {
       return loadMetadata(track, json);
     }
     else {
-      BELL_LOG(error, "queue", "QobuzQueue::gotMetadata: %s", resp->body_string().c_str());
+      SC32_LOG(error, "QobuzQueue::gotMetadata: %s", resp->body_string().c_str());
     }
     return false;
   }
@@ -85,12 +85,12 @@ namespace qobuz {
       if (json.contains("n_channels")) track->n_channels = json["n_channels"].get<int>();
       if (json.contains("bit_depth")) track->bits_depth = json["bit_depth"].get<int>();
       if (json.contains("sampling_rate")) track->sampling_rate = (int)(json["sampling_rate"].get<double>() * 1000);
-      BELL_LOG(info, "queue", "QobuzQueue::getFileUrl: ms=%lu, channels=%d, depth=%d, rate=%d", track->durationMs, track->n_channels, track->bits_depth, track->sampling_rate);
+      SC32_LOG(info, "QobuzQueue::getFileUrl: ms=%lu, channels=%d, depth=%d, rate=%d", track->durationMs, track->n_channels, track->bits_depth, track->sampling_rate);
       track->state = QueuedTrackState::READY;
       return true;
     }
     else {
-      BELL_LOG(error, "queue", "QobuzQueue::getFileUrl: %s", resp->body_string().c_str());
+      SC32_LOG(error, "QobuzQueue::getFileUrl: %s", resp->body_string().c_str());
     }
     return false;
   }
@@ -114,69 +114,89 @@ namespace qobuz {
       << "}";
     return oss.str();
   }
-uint8_t HDigit2Dez(const char c) {
-  if (c >= 'A') return 10 + c - 'A';
-  return c - '0';
-}
+  uint8_t HDigit2Dez(const char c) {
+    if (c >= 'A') return 10 + c - 'A';
+    return c - '0';
+  }
+  void QobuzQueue::sendCommingTracks() {
+    qconnect_QConnectMessage msg = qconnect_QConnectMessage_init_zero;
+    msg.has_messageType = true;
+    msg.messageType = qconnect_QConnectMessageType_MESSAGE_TYPE_CTRL_SRVR_AUTOPLAY_ADD_TRACKS;
+    msg.has_ctrlSrvrAutoplayLoadTracks = true;
+    msg.ctrlSrvrAutoplayLoadTracks.trackIds_count = queue_.size() - index_;
+    msg.ctrlSrvrAutoplayLoadTracks.trackIds = (uint32_t*)calloc(msg.ctrlSrvrAutoplayLoadTracks.trackIds_count, sizeof(uint32_t));
+    for (int i = 0; i < msg.ctrlSrvrAutoplayLoadTracks.trackIds_count; i++) {
+      msg.ctrlSrvrAutoplayLoadTracks.trackIds[i] = queue_[index_ + i].trackId;
+    }
+    msg.ctrlSrvrAutoplayLoadTracks.has_queueVersion = true;
+    msg.ctrlSrvrAutoplayLoadTracks.queueVersion = queueuState.queueVersion;
+    msg.ctrlSrvrAutoplayLoadTracks.contextUuid = dataToPbArray(sessionId, sizeof(sessionId));
+    msg.ctrlSrvrAutoplayLoadTracks.actionUuid = vectorToPbArray(pbArrayToVector(queueuState.actionUuid));
 
-uint8_t H2Digit2Dez(const char *arr) {
-  return HDigit2Dez(arr[0]) * 16 + HDigit2Dez(arr[1]);
-}
+    on_ws_msg_(&msg, 1);
+  }
+  uint8_t H2Digit2Dez(const char* arr) {
+    return HDigit2Dez(arr[0]) * 16 + HDigit2Dez(arr[1]);
+  }
   bool QobuzQueue::getSuggestions() {
     size_t currentSize = queue_.size();
     if (!currentSize) return false;
     size_t lastTrackQId = queue_.back().queueItemId;
-    while(1){
-    auto resp = on_qobuz_post_(
-      "dynamic", "suggest", buildSuggestionsPayload(queue_, expandedTrackInfo_cache_),
-      {}, false);
-    if (resp->status() == 200) {
-      if (resp->contentLength() == 0) return false;
-      auto json = nlohmann::json::parse(resp->body_string());
-      if (json.empty()) return false;
-      if (json.find("tracks") != json.end()) {
-        nlohmann::json& tracks = json["tracks"]["items"];
+    SC32_LOG(info, "QobuzQueue::getSuggestions: lastTrackQId=%lu", lastTrackQId);
+    while (1) {
+      auto resp = on_qobuz_post_(
+        "dynamic", "suggest", buildSuggestionsPayload(queue_, expandedTrackInfo_cache_),
+        {}, false);
+      if (resp->status() == 200) {
+        if (resp->contentLength() == 0) return false;
+        auto json = nlohmann::json::parse(resp->body_string());
+        if (json.empty()) return false;
+        if (json.find("tracks") != json.end()) {
+          nlohmann::json& tracks = json["tracks"]["items"];
 
-        qconnect_QConnectMessage msg = qconnect_QConnectMessage_init_zero;
-        msg.has_messageType = true;
-        msg.messageType = qconnect_QConnectMessageType_MESSAGE_TYPE_CTRL_SRVR_AUTOPLAY_ADD_TRACKS;
-        msg.has_ctrlSrvrAutoplayLoadTracks = true;
-        if (!tracks.size()) return false;
-        msg.ctrlSrvrAutoplayLoadTracks.trackIds_count = tracks.size() + 1;
-        msg.ctrlSrvrAutoplayLoadTracks.trackIds = (uint32_t*)calloc(msg.ctrlSrvrAutoplayLoadTracks.trackIds_count, sizeof(uint32_t));
-        
-          msg.ctrlSrvrAutoplayLoadTracks.trackIds[0] = preloadedTracks_.back()->id;
-        
-        for (int i = 0; i < tracks.size(); i++) {
-          msg.ctrlSrvrAutoplayLoadTracks.trackIds[i + 1] = tracks[i]["id"];
-        }
-        msg.ctrlSrvrAutoplayLoadTracks.has_queueVersion = true;
-        msg.ctrlSrvrAutoplayLoadTracks.queueVersion = queueuState.queueVersion;
-        if(resp->header("set-cookie").size()) {
-          std::string cookie = std::string(resp->header("set-cookie"));
-          if(cookie.find("qobuz-session") != std::string::npos) {
-            std::string session = cookie.substr(cookie.find("qobuz-session=") + 14, cookie.find(";") - (cookie.find("qobuz-session=") + 14));
-            std::vector<uint8_t> session_to_16;
-            for (int i = 0; i < session.size(); i+=2) {
-              session_to_16.push_back(H2Digit2Dez(session.substr(i, 2).c_str()));
-            }
-            msg.ctrlSrvrAutoplayLoadTracks.contextUuid = vectorToPbArray(session_to_16);
+          qconnect_QConnectMessage msg = qconnect_QConnectMessage_init_zero;
+          msg.has_messageType = true;
+          msg.messageType = qconnect_QConnectMessageType_MESSAGE_TYPE_CTRL_SRVR_AUTOPLAY_ADD_TRACKS;
+          msg.has_ctrlSrvrAutoplayLoadTracks = true;
+          if (!tracks.size()) return false;
+          msg.ctrlSrvrAutoplayLoadTracks.trackIds_count = tracks.size() + preloadedTracks_.size();
+          msg.ctrlSrvrAutoplayLoadTracks.trackIds = (uint32_t*)calloc(msg.ctrlSrvrAutoplayLoadTracks.trackIds_count, sizeof(uint32_t));
+
+          for (int i = 0; i < preloadedTracks_.size(); i++) {
+            msg.ctrlSrvrAutoplayLoadTracks.trackIds[i] = preloadedTracks_[i]->id;
           }
-        } else  msg.ctrlSrvrAutoplayLoadTracks.contextUuid = dataToPbArray(sessionId, sizeof(sessionId));
-        msg.ctrlSrvrAutoplayLoadTracks.actionUuid = vectorToPbArray(pbArrayToVector(queueuState.actionUuid));
+          for (int i = 0; i < tracks.size(); i++) {
+            msg.ctrlSrvrAutoplayLoadTracks.trackIds[i + preloadedTracks_.size()] = tracks[i]["id"];
+          }
+          msg.ctrlSrvrAutoplayLoadTracks.has_queueVersion = true;
+          msg.ctrlSrvrAutoplayLoadTracks.queueVersion = queueuState.queueVersion;
+          if (resp->header("set-cookie").size()) {
+            std::string cookie = std::string(resp->header("set-cookie"));
+            if (cookie.find("qobuz-session") != std::string::npos) {
+              std::string session = cookie.substr(cookie.find("qobuz-session=") + 14, cookie.find(";") - (cookie.find("qobuz-session=") + 14));
+              std::vector<uint8_t> session_to_16;
+              for (int i = 0; i < session.size(); i += 2) {
+                session_to_16.push_back(H2Digit2Dez(session.substr(i, 2).c_str()));
+              }
+              msg.ctrlSrvrAutoplayLoadTracks.contextUuid = vectorToPbArray(session_to_16);
+            }
+          }
+          else  msg.ctrlSrvrAutoplayLoadTracks.contextUuid = dataToPbArray(sessionId, sizeof(sessionId));
+          msg.ctrlSrvrAutoplayLoadTracks.actionUuid = vectorToPbArray(pbArrayToVector(queueuState.actionUuid));
 
-        on_ws_msg_(&msg, 1);
-        return true;
+          on_ws_msg_(&msg, 1);
+          return true;
+        }
       }
-    } else if(resp->status() <= 400) {
-      BELL_LOG(error, "queue", "QobuzQueue::getSuggestions: %s", resp->body_string().c_str());
-      continue;
+      else if (resp->status() <= 400) {
+        SC32_LOG(error, "QobuzQueue::getSuggestions: %s", resp->body_string().c_str());
+        continue;
+      }
+      else {
+        SC32_LOG(error, "QobuzQueue::getSuggestions: %s", resp->body_string().c_str());
+      }
+      return false;
     }
-    else {
-      BELL_LOG(error, "queue", "QobuzQueue::getSuggestions: %s", resp->body_string().c_str());
-    }
-    return false;
-  }
   }
   void QobuzQueue::runTask() {
     isRunning_.store(true);
@@ -200,17 +220,19 @@ uint8_t H2Digit2Dez(const char *arr) {
               index_ = 0;
               break;
             }
-            preloadedTracks_.push_back(std::make_shared<QobuzQueueTrack>(queue_[idx]));
-          } else break;
-        }
-        if(!fetchedAutoplay_ && preloadedTracks_.size() < 2 && expandedTrackInfo_cache_.size()) {
-            if (!getSuggestions()) {
-              isRunning_.store(false);
-              break;
-            }
-            fetchedAutoplay_ = true;
+            preloadedTracks_.push_back(std::make_shared<QobuzQueueTrack>(queue_[idx], audioFormat_));
           }
-      } else BELL_SLEEP_MS(50);
+          else break;
+        }
+        if (!fetchedAutoplay_ && preloadedTracks_.size() < 2 && expandedTrackInfo_cache_.size()) {
+          if (!getSuggestions()) {
+            isRunning_.store(false);
+            break;
+          }
+          fetchedAutoplay_ = true;
+        }
+      }
+      else BELL_SLEEP_MS(50);
       if (!preloadedTracks_.size()) BELL_SLEEP_MS(300);
       {
         std::scoped_lock lock(preloadedTracksMutex_);
@@ -239,7 +261,7 @@ uint8_t H2Digit2Dez(const char *arr) {
         default:
           if (track == tracks.back()) {
             BELL_SLEEP_MS(300); // wait for next track to load
-          
+
           }
           break;
         }
@@ -253,13 +275,13 @@ uint8_t H2Digit2Dez(const char *arr) {
   std::shared_ptr<QobuzQueueTrack> QobuzQueue::consumeTrack(std::shared_ptr<QobuzQueueTrack> prevTrack, int32_t& nextTrackQueueIndex) {
     if (!queue_.size()) return nullptr;
     while (true) {
-      if(fetchedAutoplay_) {
+      if (fetchedAutoplay_) {
         BELL_SLEEP_MS(100);
         continue;
       }
       if (preloadedTracks_.empty()) {
         BELL_SLEEP_MS(100);
-        if(index_ >= queue_.size()) {
+        if (index_ >= queue_.size()) {
           return nullptr;
         }
         continue;
@@ -267,7 +289,7 @@ uint8_t H2Digit2Dez(const char *arr) {
       std::shared_ptr<qobuz::QobuzQueueTrack> track;
       {
         std::scoped_lock lock(preloadedTracksMutex_);
-        if(prevTrack) {
+        if (prevTrack) {
           auto prevTrackIter = std::find(preloadedTracks_.begin(), preloadedTracks_.end(), prevTrack);
           if (prevTrackIter != preloadedTracks_.end()) {
             lastIndex_ = index_;
@@ -278,7 +300,7 @@ uint8_t H2Digit2Dez(const char *arr) {
         track = preloadedTracks_.front();
         if (preloadedTracks_.size() > 1) nextTrackQueueIndex = preloadedTracks_[1]->index;
         else nextTrackQueueIndex = 0;
-        if(index_ >= shuffledIndexes_.size()) {
+        if (index_ >= shuffledIndexes_.size()) {
           shuffledIndexes_.push_back(index_);
         }
       }

@@ -16,8 +16,12 @@
 #include "QobuzTrack.h"
 #include "QobuzQueue.h"
 
+#include "Logger.h"
+
 class QobuzPlayer : public StreamBase {
 public:
+
+  using OnUiMessage = std::function<void(const std::string&)>;
 
   using OnWsMessage = std::function<void(_qconnect_QConnectMessage*, size_t)>;
 
@@ -35,9 +39,14 @@ public:
     const std::vector<std::pair<std::string, std::string>>& params,
     bool sign
   )>;
- 
+
   QobuzPlayer(std::shared_ptr<AudioControl> audio, std::shared_ptr<qobuz::QobuzQueue> queue);
-  ~QobuzPlayer() { BELL_LOG(info, "QOBUZ", "QobuzPlayer destroyed"); }
+  ~QobuzPlayer() {
+    stopTask();
+    while (hb_) BELL_SLEEP_MS(50);
+    pb_release(qconnect_QueueRendererState_fields, &player_state);
+    std::scoped_lock lock(isRunningMutex_);
+  }
   void runTask() override;
 
   void onGet(OnQobuzGet f) { on_qobuz_get_ = std::move(f); }
@@ -52,7 +61,7 @@ public:
   std::shared_ptr<qobuz::QobuzQueueTrack> getCurrentTrack() const { return current_track_buffering; }
   void setRepeatOne(bool v) { repeatOne_.store(v); }
   void stopTask() {
-    stop();
+    stopTrack();
     isRunning_.store(false);
   }
   void stopTrack() {
@@ -60,7 +69,7 @@ public:
       wantStop_.store(true);
     }
   }
-    size_t currentTrackValueMs() const {
+  size_t currentTrackValueMs() const {
     if (!current_track_playing) return 0;
     if (player_state.currentPosition.has_timestamp && player_state.currentPosition.timestamp != 0) {
       return player_state.currentPosition.value + (timesync::now_ms() - player_state.currentPosition.timestamp);
@@ -68,10 +77,14 @@ public:
     return 0;
   }
 
+  void setTracks() {
+    current_track_playing = queue_->consumeTrack(nullptr, player_state.nextQueueItemId);
+  }
+
   void sendPlayerState();
   std::string user_id_{ "" };
-  qconnect_SrvrCtrlSessionState sessionState_ = qconnect_SrvrCtrlSessionState_init_default;
   qconnect_QueueRendererState player_state = qconnect_QueueRendererState_init_default;
+  OnUiMessage onUiMessage_;
 
 private:
   std::vector<uint8_t> header_;    // optional cached header
@@ -89,6 +102,7 @@ private:
   std::atomic<bool> eofSeen_{ false };
   std::atomic<bool> wantRestart_{ false };
   std::atomic<bool> repeatOne_{ false };
+  std::mutex isRunningMutex_;
   /**
    * @brief Get stream information from a URL (HTTP(S) or HTTPS).
    * @param url URL to query
@@ -110,13 +124,13 @@ private:
    * @param dst Optional destination for reduced FLAC metadata
    * @param offset Offset in bytes to store the parsed metadata
    * @return true if successful, false otherwise
-   * 
+   *
    * Probes a SocketStream for FLAC metadata.
    * If not found, it looks for the first frame header (0xFF f8 fb)
    * and parses the FLAC metadata from there.
    * A reduced metadata buffer (42 bytes) is provided in dst.
    */
-  bool probeFlac(bell::SocketStream& s, size_t n, uint8_t* dst, size_t& offset);
+  bool probeFlac(bell::HTTPClient::Response* s, size_t n, uint8_t* dst, size_t& offset);
 
   bool probeHttpHeaders(bell::HTTPClient::Headers& headers, size_t& totalLength, qobuz::AudioFormat fmt);
 

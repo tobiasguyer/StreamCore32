@@ -273,8 +273,8 @@ message SrvrCtrlVolumeChanged           { optional uint64 rendererId = 1; option
 message SrvrCtrlVolumeMuted             { optional uint64 rendererId = 1; optional bool  value  = 2; }
 message SrvrCtrlQueueErrorMessage       { // reuse of PlaybackError shape, renamed here
   optional QueueVersion queueVersion = 1;
-  optional int32        queueItemId  = 2;
-  optional int32        errorType    = 3;
+  optional bytes        actionUuid   = 2 [(nanopb).type = FT_POINTER];
+  optional Error        error    = 3;
 }
 message SrvrCtrlShuffleModeSet          {
   optional QueueVersion queueVersion = 1;

@@ -4,7 +4,7 @@
 #include "EspRandomEngine.h" // esp_randomn
 #include "TimeSync.h"
 
-#include "BellLogger.h"
+#include "Logger.h"
 
 static std::string b64(const uint8_t* d, size_t n) {
   static const char B[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -38,7 +38,7 @@ bool WebSocketClient::connect(const std::string& url,
   if (handshake(url, origin, subs)) return true;
 
   // 2nd attempt: no subprotocols at all
-  BELL_LOG(error, "qws", "handshake retry without subprotocols");
+  SC32_LOG(error, "handshake retry without subprotocols");
   if (handshake(url, origin, {})) return true;
 
   return false;
@@ -49,14 +49,14 @@ bool WebSocketClient::handshake(const std::string& url,
   const std::vector<std::string>& subs)
 {
   bell::URLParser u = bell::URLParser::parse(url);
-  if (u.schema != "wss") { BELL_LOG(error, "qws", "non-wss schema: %s", u.schema.c_str()); return false; }
+  if (u.schema != "wss") { SC32_LOG(error, "non-wss schema: %s", u.schema.c_str()); return false; }
   const std::string host = u.host;
   const int port = (u.port > 0) ? u.port : 443;
   std::string path = u.path.empty() ? "/" : u.path;
 
   tls_.reset(new bell::TLSSocket());
   tls_->open(host, (uint16_t)port);
-  if (!tls_->isOpen()) { BELL_LOG(error, "qws", "TLS open failed"); return false; }
+  if (!tls_->isOpen()) { SC32_LOG(error, "TLS open failed"); return false; }
 
   const std::string seckey = genSecKey();
   std::string req;
@@ -84,7 +84,7 @@ bool WebSocketClient::handshake(const std::string& url,
   req += "\r\n";
 
   if (tls_->write(reinterpret_cast<const uint8_t*>(req.data()), req.size()) <= 0) {
-    BELL_LOG(error, "qws", "write handshake failed");
+    SC32_LOG(error, "write handshake failed");
     return false;
   }
 
@@ -100,11 +100,11 @@ bool WebSocketClient::handshake(const std::string& url,
     if (r == 1) {
       hdr.push_back((char)ch);
       if (hdr.size() >= 4 && hdr.compare(hdr.size() - 4, 4, "\r\n\r\n") == 0) break;
-      if (hdr.size() > 16384) { BELL_LOG(error, "qws", "header too large"); return false; }
+      if (hdr.size() > 16384) { SC32_LOG(error, "header too large"); return false; }
       // don’t count time if we’re receiving bytes
       continue;
     }
-    if (r == 0) { BELL_LOG(error, "qws", "server closed during handshake"); return false; }
+    if (r == 0) { SC32_LOG(error, "server closed during handshake"); return false; }
     // r < 0 -> TLSSocket already logged; brief backoff and keep waiting a bit
     BELL_SLEEP_MS(10);
     waited_ms += 10;
@@ -113,7 +113,7 @@ bool WebSocketClient::handshake(const std::string& url,
   if (hdr.find(" 101 ") == std::string::npos) {
     std::string show = hdr.substr(0, std::min<size_t>(hdr.size(), 512));
     for (auto& c : show) if ((unsigned)c < 32 && c != '\r' && c != '\n') c = '.';
-    BELL_LOG(error, "qws", "WS handshake non-101. First header bytes:\n---\n%s\n---", show.c_str());
+    SC32_LOG(error, "WS handshake non-101. First header bytes:\n---\n%s\n---", show.c_str());
     return false;
   }
 
@@ -131,7 +131,7 @@ bool WebSocketClient::handshake(const std::string& url,
   return true;
 }
 
-  void WebSocketClient::ping() { writeFrame(0x9, nullptr, 0); awaiting_pong_ = true; last_tx_ms_ = timesync::now_ms(); }
+void WebSocketClient::ping() { writeFrame(0x9, nullptr, 0); awaiting_pong_ = true; last_tx_ms_ = timesync::now_ms(); }
 // Masked text frame (client -> server)
 bool WebSocketClient::writeFrame(uint8_t opcode, const uint8_t* data, size_t len) {
   if (!open_) return false;
@@ -178,7 +178,7 @@ bool WebSocketClient::readFrame(std::vector<uint8_t>& out) {
   uint8_t mask[4] = { 0,0,0,0 };
   if (masked) {
     if (tls_->read(mask, 4) != 4) {
-      BELL_LOG(error, "qws", "failed to read mask"); return false;
+      SC32_LOG(error, "failed to read mask"); return false;
     }
   }
 
@@ -186,7 +186,7 @@ bool WebSocketClient::readFrame(std::vector<uint8_t>& out) {
   size_t got = 0;
   while (got < len) {
     ssize_t r = tls_->read(reinterpret_cast<uint8_t*>(&payload[got]), (size_t)(len - got));
-    if (r <= 0) { BELL_SLEEP_MS(5); BELL_LOG(error, "qws", "yield to read frame, got=%d", got); continue; }
+    if (r <= 0) { BELL_SLEEP_MS(5); SC32_LOG(error, "yield to read frame, got=%d", got); continue; }
     got += (size_t)r;
   }
 
@@ -203,7 +203,7 @@ bool WebSocketClient::readFrame(std::vector<uint8_t>& out) {
     writeFrame(0xA, reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
     return false;
   }
-  else BELL_LOG(error, "qws", "unknown opcode %d", opcode);
+  else SC32_LOG(error, "unknown opcode %d", opcode);
   if (opcode == 0x8) { open_ = false; if (on_close_) on_close_(1000, "server-close"); return false; }
   return false;
 }
@@ -262,9 +262,12 @@ void WebSocketClient::runTask() {
     }
     // If we were awaiting a Pong and rx stayed silent too long -> timeout
     if (open_ && awaiting_pong_ && (now - last_rx_ms_) >= keepalive_pong_timeout_ms_) {
-      BELL_LOG(error, "qws", "timeout: no PONG in %ums (last_rx=%llu, now=%llu)",
+      SC32_LOG(error, "timeout: no PONG in %ums (last_rx=%llu, now=%llu)",
         keepalive_pong_timeout_ms_, (unsigned long long)last_rx_ms_, (unsigned long long)now);
-      close(1001, "ping-timeout");   // triggers on_close_ callback
+      isRunning_.store(false);
+      open_ = false;
+      if (tls_) tls_->close();
+      if (on_close_) on_close_(1001, "ping-timeout");   // triggers on_close_ callback
       continue;  // let outer logic decide reconnection
     }
 

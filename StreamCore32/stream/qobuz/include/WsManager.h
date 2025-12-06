@@ -11,6 +11,8 @@
 #include "protobuf/qconnect_payload.pb.h"
 #include "NanoPBHelper.h"
 
+#include "Logger.h"
+
 struct WSToken {
   std::string jwt;
   uint64_t    exp_s = 0;        // UTC seconds
@@ -27,7 +29,7 @@ public:
   using BytesCallback = std::function<void(const std::vector<uint8_t>& payload)>;
   using TokenRefresher = std::function<WSToken()>;
 
-  WsManager(TokenRefresher refresh_token) : bell::Task("WsManager", 4096 * 4, 1, 1) {
+  WsManager(TokenRefresher refresh_token) : bell::Task("qobuz_ws_manager", 4096 * 3, 1, 1) {
     this->refresh_token_ = std::move(refresh_token);
     if (refresh_token_) {
       auto t = refresh_token_();
@@ -40,21 +42,49 @@ public:
 
       this->auth();
       this->tx_lock_.store(false);
-
-      this->send(qconnect_QCloudMessageType_SUBSCRIBE);
-
+      std::function<void(uint8_t, const std::vector<uint8_t>, const std::vector<std::vector<uint8_t>>)> send_auth =
+        [this](uint8_t msg_type, const std::vector<uint8_t>& payload, const std::vector<std::vector<uint8_t>>& dests) {
+        uint32_t id = ++next_id_;
+        uint64_t ts = timesync::now_ms();
+        qconnect_Payload env = qconnect_Payload_init_zero;
+        env.has_msgId = true;
+        env.msgId = id;
+        env.has_msgDate = true;
+        env.msgDate = ts;
+        env.has_proto = true;
+        env.proto = qconnect_QCloudProto_QP_QCONNECT;
+        if (dests.size()) {
+          env.dests = (pb_bytes_array_t**)calloc(dests.size(), sizeof(pb_bytes_array_t*));
+          env.dests_count = dests.size();
+          for (int i = 0; i < dests.size(); i++) {
+            env.dests[i] = vectorToPbArray(dests[i]);
+          }
+        }
+        if (payload.size()) {
+          env.payload = vectorToPbArray(payload);
+        }
+        auto data = pbEncode(qconnect_Payload_fields, &env);
+        this->send(msg_type, data);
+        pb_release(qconnect_Payload_fields, &env);
+        last_tx_ms_ = ts;
+        tx_lock_.store(false);
+        };
+      send_auth(qconnect_QCloudMessageType_SUBSCRIBE, {}, {});
+      this->isConnected.store(true);
       this->on_auth_();
       });
     client_->onClose([&](int code, const std::string& reason) {
-      BELL_LOG(error, "qws", "CLOSED %d %s", code, reason.c_str());
+      SC32_LOG(error, "CLOSED %d %s", code, reason.c_str());
       });
   };
   ~WsManager() {
-    client_->close();
-    isRunning_.store(false);
+    stop();
     std::scoped_lock lock(isRunningMutex_);
-
   };
+  void stop() {
+    isRunning_.store(false);
+    client_->close();
+  }
   void setToken(const WSToken& t) {
     token_ = t.jwt;
     token_exp_s_ = t.exp_s;
@@ -70,17 +100,23 @@ public:
       1, ts,
       strdup(token_.c_str())
     };
-    BELL_LOG(info, "qws", "AUTH %s", token_.c_str());
     auto data = client_->pack(qconnect_QCloudMessageType_AUTHENTICATE, pbEncode(qconnect_Authenticate_fields, &auth));
     client_->send(0x2, data);
     pb_release(qconnect_Authenticate_fields, &auth);
   }
-  void onConnected(){
+  void onConnected() {
     tx_lock_.store(false);
   }
-  void send(uint8_t msg_type, const std::vector<uint8_t>& payload = {}, const std::vector<std::vector<uint8_t>>& dests = {}, uint64_t ts = 0, Callback cb = nullptr) {
-    while(tx_lock_.load()) BELL_SLEEP_MS(100);
+
+  void send(uint8_t msg_type, const std::vector<uint8_t>& payload) {
+    while (tx_lock_.load()) BELL_SLEEP_MS(100);
     tx_lock_.store(true);
+    auto data = client_->pack(msg_type, payload);
+    client_->send(0x2, data);
+    tx_lock_.store(false);
+  }
+  void send(uint8_t msg_type, const std::vector<uint8_t>& payload, const std::vector<std::vector<uint8_t>>& dests, uint64_t ts = 0, Callback cb = nullptr) {
+    if (!this->isConnected.load()) return;
     uint32_t id = ++next_id_;
     if (!ts) ts = timesync::now_ms();
     if (cb) {
@@ -104,13 +140,11 @@ public:
     if (payload.size()) {
       env.payload = vectorToPbArray(payload);
     }
-    auto data = client_->pack(msg_type, pbEncode(qconnect_Payload_fields, &env));
-    client_->send(0x2, data);
+    auto data = pbEncode(qconnect_Payload_fields, &env);
+    this->send(msg_type, data);
     pb_release(qconnect_Payload_fields, &env);
     last_tx_ms_ = ts;
-    tx_lock_.store(false);
   }
-
 
   void runTask() override {
     std::scoped_lock lock(isRunningMutex_);
@@ -119,13 +153,13 @@ public:
 
     while (isRunning_.load()) {
       if (!client_->connect(endpoint_, "https://play.qobuz.com", { "qws" })) {
-        BELL_LOG(error, "qws", "connect failed; retrying in 2s");
+        SC32_LOG(error, "connect failed; retrying in 2s");
         BELL_SLEEP_MS(2000);
         continue;
       }
 
       // OPTIONAL: tune keepalive
-      client_->setKeepalive(/*pingEveryMs*/30000, /*pongTimeoutMs*/30000);
+      client_->setKeepalive(/*pingEveryMs*/10000, /*pongTimeoutMs*/30000);
 
       client_->startTask(); // starts WS I/O loop
       while (isRunning_.load() && client_->isOpen()) {
@@ -144,11 +178,7 @@ public:
                 on_payload_(r.second);
               }
               else {
-                BELL_LOG(error, "qws", "no callback for command %d", r.first);
-                for (int i = 0; i < r.second.size(); i++) {
-                  printf("%02x ", r.second[i]);
-                }
-                printf("\n");
+                SC32_LOG(error, "no callback for command %d", r.first);
               }
             }
           }
@@ -157,10 +187,10 @@ public:
         BELL_SLEEP_MS(100);
         if (token_exp_s_) {
           uint64_t now = timesync::now_ms(); // UTC ms
-          if (now - last_tx_ms_ > REFRESH_WINDOW_MS && 
+          if (now - last_tx_ms_ > REFRESH_WINDOW_MS &&
             now + REFRESH_WINDOW_MS >= token_exp_s_ * 1000ULL) {
             if (refresh_token_) {
-              while(tx_lock_.load()) BELL_YIELD();
+              while (tx_lock_.load()) BELL_YIELD();
               tx_lock_.store(true);
               auto t = refresh_token_();
               if (!t.jwt.empty()) {
@@ -171,7 +201,7 @@ public:
           }
         }
       }
-      BELL_LOG(info, "qws", "disconnected; reconnect in 2s");
+      SC32_LOG(info, "disconnected; reconnect in 2s");
       BELL_SLEEP_MS(2000);
     }
   }
@@ -184,6 +214,7 @@ private:
   std::mutex isRunningMutex_;
   std::atomic<bool> isRunning_ = false;
   std::atomic<bool> tx_lock_ = false;
+  std::atomic<bool> isConnected = false;
   std::mutex cb_mtx_;
   std::map<uint32_t, Callback> cbs_;
 

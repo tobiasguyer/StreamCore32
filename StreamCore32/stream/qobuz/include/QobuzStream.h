@@ -22,9 +22,12 @@
 #include <mbedtls/entropy.h>
 #include "nlohmann/json.hpp"      // for basic_json<>::object_t, basic_json
 #include "nlohmann/json_fwd.hpp"  // for json
+
+#include "Logger.h"
 class QobuzStream : public bell::Task {
 public:
   using reportStatusFunc = std::function<void(const std::string& status)>;
+  using OnUiMessageFunc = std::function<void(const std::string& msg)>;
   struct SessionId {
     size_t browserId = 0;
     uint8_t raw[16];          // use this in protobuf (len = 16)
@@ -54,8 +57,6 @@ public:
     uint64_t rendererId = 0;
     WSToken ws_token;
     Token api_token;
-
-    int audioFormat = 6; // 5: MP3_320, 6: FLAC_16_44, 27: Hi-Res FLAC
     bool empty() const {
       return appId.empty() && appSecret.empty() && email.empty() && password.empty();
     }
@@ -284,121 +285,123 @@ public:
     return s;
   }
 
-  QobuzStream(std::shared_ptr<AudioControl> audio, const Config& cfg, std::unique_ptr<StreamCoreFile> creds_)
-  : bell::Task("Qobuz", 1024 * 8, 4, 1, 1) {
-  creds = std::move(creds_);
-  audioControl_ = audio;
-  cfg_ =cfg; 
-  cfg_.session_id = createSessionId();
-  if (!cfg_.XsessionId.token.empty()) {
-    SessionId sid;
-    parseSessionId(cfg_.XsessionId.token, sid);
-    cfg_.XsessionId.token = sid.hex32;
-    memcpy(cfg_.XsessionId_raw, sid.raw, 16);
-  }
-  if (cfg_.appId.empty() || cfg_.appSecret.empty()){
-    Record appInfo;
-    if (creds->load("appInfo", &appInfo) == 0) {
-      for (auto& f : appInfo.fields) {
-        if (f.name == "appId") cfg_.appId = std::string(f.value.begin(), f.value.end());
-        if (f.name == "appSecret") cfg_.appSecret = std::string(f.value.begin(), f.value.end());
-      }
+  QobuzStream(std::shared_ptr<AudioControl> audio, const Config& cfg, std::unique_ptr<StreamCoreFile> creds_, std::function<void(bool)> onConnect)
+    : bell::Task("qobuz_ctrl", 1024 * 8, 4, 1, 1), onConnect_(onConnect) {
+    creds = std::move(creds_);
+    audioControl_ = audio;
+    cfg_ = cfg;
+    cfg_.session_id = createSessionId();
+    if (!cfg_.XsessionId.token.empty()) {
+      SessionId sid;
+      parseSessionId(cfg_.XsessionId.token, sid);
+      cfg_.XsessionId.token = sid.hex32;
+      memcpy(cfg_.XsessionId_raw, sid.raw, 16);
     }
-    if(cfg_.appId.empty()) {
-      QobuzConfig::ClientAppSecrets secrets;
-      config_ = std::make_unique<QobuzConfig>(&secrets);
-      config_->loadedSemaphore->wait();
-      cfg_.appId = secrets.id;
-      cfg_.appSecret = secrets.secrets.begin()->second;
-      config_.reset();
+    if (cfg_.appId.empty() || cfg_.appSecret.empty()) {
       Record appInfo;
-      appInfo.userkey = "appInfo";
-      appInfo.fields.push_back({ "appId", cfg_.appId });
-      appInfo.fields.push_back({ "appSecret", cfg_.appSecret });
-      creds->save(appInfo, true);
-    }
-  }
-  const std::string uuidHex = QobuzStream::formatSessionId(cfg_.session_id);
-
-  ZeroconfServiceManager::ServiceSpec spec;
-  spec.key         = "qobuz";
-  spec.serviceType = "_qobuz-connect";   // same as before
-  spec.proto       = "_tcp";
-  spec.instanceName = "StreamCore32";    // how it appears in mDNS
-  spec.txt = {
-    { "path",        "/streamcore" },
-    { "type",        "SPEAKER" },
-    { "sdk_version", "sc32-1.0.0" },
-    { "Name",        "StreamCore32" },
-    { "device_uuid", uuidHex },
-  };
-  // ------------------- /streamcore/get-display-info -------------------
-  spec.endpoints.push_back({
-    ZeroconfServiceManager::HttpMethod::GET,
-    "/streamcore/get-display-info",
-    [uuidHex](mg_connection* c) -> std::string {
-      nlohmann::json j = {
-        {"type",              "SPEAKER"},
-        {"friendly_name",     "StreamCore32"},
-        {"model_display_name","StreamCore32 ESP32"},
-        {"brand_display_name","StreamCore"},
-        {"serial_number",     uuidHex},
-        {"max_audio_quality", "HIRES_L3"}
-      };
-      auto s = j.dump();
-      return s;
-    }
-  });
-  // ------------------- /streamcore/get-connect-info -------------------
-  spec.endpoints.push_back({
-    ZeroconfServiceManager::HttpMethod::GET,
-    "/streamcore/get-connect-info",
-    [appId = cfg_.appId](mg_connection* c) -> std::string {
-
-      nlohmann::json j = {
-        {"current_session_id", ""},
-        {"app_id",             appId}
-      };
-      auto s = j.dump();
-      return s;
-    }
-  });
-  // ------------------- /streamcore/connect-to-qconnect ----------------
-  spec.endpoints.push_back({
-    ZeroconfServiceManager::HttpMethod::POST,
-    "/streamcore/connect-to-qconnect",
-    [this](mg_connection* c) -> std::string {
-      const mg_request_info* ri = mg_get_request_info(c);
-      std::string body;
-
-      if (ri && ri->content_length > 0) {
-        body.resize(ri->content_length);
-        mg_read(c, body.data(), ri->content_length);
-
-        try {
-          nlohmann::json j = nlohmann::json::parse(body);
-          SessionId sid;
-          parseSessionId(j.at("session_id").get<std::string>(), sid);
-          this->cfg_.XsessionId.token   = sid.hex32;
-          memcpy(this->cfg_.XsessionId_raw, sid.raw, 16);
-
-          this->cfg_.ws_token.endpoint  = j.at("jwt_qconnect").at("endpoint").get<std::string>();
-          this->cfg_.ws_token.jwt       = j.at("jwt_qconnect").at("jwt").get<std::string>();
-          this->cfg_.ws_token.exp_s     = j.at("jwt_qconnect").at("exp").get<uint64_t>();
-
-          this->cfg_.api_token.token    = j.at("jwt_api").at("jwt").get<std::string>();
-          this->cfg_.api_token.expiresAt= j.at("jwt_api").at("exp").get<uint64_t>() * 1000;
-          this->isActive_.store(true);
-          this->startTask();
-        } catch (const std::exception& e) {
-          BELL_LOG(error, "QOBUZ", "connect-to-qconnect parse error: %s", e.what());
+      if (creds->load("appInfo", &appInfo) == 0) {
+        for (auto& f : appInfo.fields) {
+          if (f.name == "appId") cfg_.appId = std::string(f.value.begin(), f.value.end());
+          if (f.name == "appSecret") cfg_.appSecret = std::string(f.value.begin(), f.value.end());
         }
       }
-      return "{}";
+      if (cfg_.appId.empty()) {
+        QobuzConfig::ClientAppSecrets secrets;
+        config_ = std::make_unique<QobuzConfig>(&secrets);
+        config_->loadedSemaphore->wait();
+        cfg_.appId = secrets.id;
+        cfg_.appSecret = secrets.secrets.begin()->second;
+        config_.reset();
+        Record appInfo;
+        appInfo.userkey = "appInfo";
+        appInfo.fields.push_back({ "appId", cfg_.appId });
+        appInfo.fields.push_back({ "appSecret", cfg_.appSecret });
+        creds->save(appInfo, true);
+      }
     }
-  });
-  zeroconf.addService(spec);
+    const std::string uuidHex = QobuzStream::formatSessionId(cfg_.session_id);
+
+    ZeroconfServiceManager::ServiceSpec spec;
+    spec.key = "qobuz";
+    spec.serviceType = "_qobuz-connect";   // same as before
+    spec.proto = "_tcp";
+    spec.instanceName = "StreamCore32";    // how it appears in mDNS
+    spec.txt = {
+      { "path",        "/streamcore" },
+      { "type",        "SPEAKER" },
+      { "sdk_version", "sc32-1.0.0" },
+      { "Name",        "StreamCore32" },
+      { "device_uuid", uuidHex },
+    };
+    // ------------------- /streamcore/get-display-info -------------------
+    spec.endpoints.push_back({
+      ZeroconfServiceManager::HttpMethod::GET,
+      "/streamcore/get-display-info",
+      [uuidHex](mg_connection* c) -> std::string {
+        nlohmann::json j = {
+          {"type",              "SPEAKER"},
+          {"friendly_name",     "StreamCore32"},
+          {"model_display_name","StreamCore32 ESP32"},
+          {"brand_display_name","StreamCore"},
+          {"serial_number",     uuidHex},
+          {"max_audio_quality", "HIRES_L3"}
+        };
+        auto s = j.dump();
+        return s;
+      }
+      });
+    // ------------------- /streamcore/get-connect-info -------------------
+    spec.endpoints.push_back({
+      ZeroconfServiceManager::HttpMethod::GET,
+      "/streamcore/get-connect-info",
+      [appId = cfg_.appId](mg_connection* c) -> std::string {
+
+        nlohmann::json j = {
+          {"current_session_id", ""},
+          {"app_id",             appId}
+        };
+        auto s = j.dump();
+        return s;
+      }
+      });
+    // ------------------- /streamcore/connect-to-qconnect ----------------
+    spec.endpoints.push_back({
+      ZeroconfServiceManager::HttpMethod::POST,
+      "/streamcore/connect-to-qconnect",
+      [this](mg_connection* c) -> std::string {
+        const mg_request_info* ri = mg_get_request_info(c);
+        std::string body;
+
+        if (ri && ri->content_length > 0) {
+          body.resize(ri->content_length);
+          mg_read(c, body.data(), ri->content_length);
+
+          try {
+            onConnect_(true);
+            nlohmann::json j = nlohmann::json::parse(body);
+            SessionId sid;
+            parseSessionId(j.at("session_id").get<std::string>(), sid);
+            this->cfg_.XsessionId.token = sid.hex32;
+            memcpy(this->cfg_.XsessionId_raw, sid.raw, 16);
+
+            this->cfg_.ws_token.endpoint = j.at("jwt_qconnect").at("endpoint").get<std::string>();
+            this->cfg_.ws_token.jwt = j.at("jwt_qconnect").at("jwt").get<std::string>();
+            this->cfg_.ws_token.exp_s = j.at("jwt_qconnect").at("exp").get<uint64_t>();
+
+            this->cfg_.api_token.token = j.at("jwt_api").at("jwt").get<std::string>();
+            this->cfg_.api_token.expiresAt = j.at("jwt_api").at("exp").get<uint64_t>() * 1000;
+            this->isActive_.store(true);
+            this->startTask();
+          }
+   catch (const std::exception& e) {
+  SC32_LOG(error, "connect-to-qconnect parse error: %s", e.what());
 }
+}
+return "{}";
+}
+      });
+    zeroconf.addService(spec);
+  }
   ~QobuzStream() {
   }
 
@@ -415,7 +418,21 @@ public:
   void WSSetRendererVolume();
   bool refreshApiToken();
   bool open(const std::string& trackId);
-
+  void stop() {
+    if (this->player_) {
+      this->player_->stopTask();
+      while (player_->isRunning()) BELL_SLEEP_MS(10);
+      this->player_.reset();
+    }
+    if (this->queue_) this->queue_.reset();
+    if (this->wsManager) {
+      this->wsManager->stop();
+      this->wsManager.reset();
+    }
+    if (token_hb_) token_hb_.reset();
+    isActive_.store(false);
+    onConnect_(false);
+  }
   void encodeBatches(qconnect_QConnectMessage* args, size_t count) {
     uint64_t ts = timesync::now_ms();
     qconnect_QConnectBatch batch = {
@@ -445,6 +462,8 @@ public:
     return s;
   }
 
+  OnUiMessageFunc onUiMessage_ = nullptr;
+
   void runTask() override;
 
 private:
@@ -452,6 +471,7 @@ private:
   using MetaCb = std::function<void(const std::string&, const std::string&)>;
   using ErrorCb = std::function<void(const std::string&)>;
   using StateCb = std::function<void(bool)>;
+  std::function<void(bool)> onConnect_ = nullptr;
 
   std::unique_ptr<bell::HTTPClient::Response> qobuzGet(
     const std::string& url_base,
@@ -484,5 +504,6 @@ private:
 
   std::atomic<bool> isActive_{ false };
   std::atomic<bool> resetPlayer_{ false };
+  std::atomic<bool> sentLoadedTracks_{ false };
   int32_t message_id = 0;
 };
