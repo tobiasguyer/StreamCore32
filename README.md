@@ -81,6 +81,48 @@ Optionally run as single command
 $ idf.py build flash monitor
 ```
 
+## Web UI
+
+StreamCore32 includes a lightweight Web UI that talks to the device via WebSockets.  
+It is meant for:
+
+- seeing the current player state (Qobuz / Spotify / Web radio)
+- radio interface
+- watching logs in the browser
+
+> Status: experimental.
+
+### Accessing the Web UI
+
+Open a browser on a device in the same network and go to:
+
+   http://sc32.local/
+
+### Features
+
+Current functionality (subject to change):
+
+- Player view
+  - Shows current track metadata (service / title / artist / album) when available
+  - Displays the active stream service (e.g. Qobuz, Spotify, Web radio)
+  - Reacts to WebSocket updates from the device
+
+![player](/StreamCore32/stream/webstream/doc/player.jpg)
+
+- Radio interface
+  - Search for radio-stations
+  - Save stations to favorites (name and url)
+  - To delete from favorite, just click on the star-icon
+
+![radio](/StreamCore32/stream/webstream/doc/radio.jpg)
+
+- Web log output
+  - Logging is routed through SC32_LOG
+  - SC32_LOG can be configured with an optional ws_send callback so logs are forwarded to the Web UI
+  - This allows you to debug the device without a serial cable, directly in the browser
+
+![debug](/StreamCore32/stream/webstream/doc/debug.jpg)
+
 # Architecture
 
 ## External interface
@@ -90,4 +132,18 @@ It exposes an interface for starting the communication with Spotify and Qobuz se
 
 ## Internal details
 
-The connection with Spotify servers to play music and recieve control information is pretty complex. First of all an access point address must be fetched from Spotify ([`ApResolve`](StreamCore32/src/ApResolve.cpp) fetches the list from http://apresolve.spotify.com/). Then a [`PlainConnection`](StreamCore32/include/PlainConnection.h) with the selected Spotify access point must be established. It is then upgraded to an encrypted [`ShannonConnection`](StreamCore32/include/ShannonConnection.h).
+The connection with Spotify servers to play music and recieve control information is pretty complex. First of all an access point address must be fetched from Spotify ([`ApResolve`](StreamCore32/stream/spotify/src/ApResolve.cpp) fetches the list from http://apresolve.spotify.com/). Then a [`PlainConnection`](StreamCore32/stream/spotify/include/PlainConnection.h) with the selected Spotify access point must be established. It is then upgraded to an encrypted [`ShannonConnection`](StreamCore32/stream/spotify/include/ShannonConnection.h).
+
+# Known limitations
+
+WebUI:
+- The player page is currently mostly visual:
+  - it reacts to WS messages (state, track changes, etc.)
+  - buttons for skip / seek / play / pause are not fully wired up yet
+
+Spotify:
+- Spotify event reporting (event-service/v1) is no more supported:
+  - played tracks do not show up in “recently played”
+  - artists do not get additional “plays” reported from this device
+
+
