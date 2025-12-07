@@ -44,7 +44,7 @@ $ cd targets/esp32
 $ idf.py set-target esp32
 ```
 
-Configure streamcore according to your hardware
+Configure StreamCore32 according to your hardware
 
 ```shell
 # run visual config editor, when done press Q to save and exit
@@ -70,7 +70,9 @@ $ idf.py build
 # upload
 $ idf.py flash
 ```
-The ESP32 will restart and begin running streamcore. You can monitor it using a serial console.
+The ESP32 will restart and begin running StreamCore32.
+The first startup will take some time, to fetch missing ids. Those are stored in NVS, and will only be refetched, if they no more work.
+You can monitor it using a serial console.
 
 Optionally run as single command
 
@@ -83,7 +85,7 @@ $ idf.py build flash monitor
 
 ## External interface
 
-`streamcore` is meant to be used as a lightweight C++ library for playing back Spotify/Qobuz/Web-Radio music and receive control notifications from Spotify-/Qobuz-connect. 
+`StreamCore32` is meant to be used as a lightweight C++ library for playing back Spotify/Qobuz/Web-Radio music and receive control notifications from Spotify-/Qobuz-connect. 
 It exposes an interface for starting the communication with Spotify and Qobuz servers trough MDNS.
 
 ## Internal details
