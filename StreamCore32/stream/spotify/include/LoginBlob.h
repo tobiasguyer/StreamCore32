@@ -24,7 +24,8 @@ class LoginBlob {
 
  public:
   LoginBlob(std::string name);
-  LoginBlob(std::string name, std::string username, std::vector<uint8_t> authData);
+  LoginBlob(std::string name, std::string username,
+            std::vector<uint8_t> authData);
   std::vector<uint8_t> authData;
   std::string username = "";
   int authType;

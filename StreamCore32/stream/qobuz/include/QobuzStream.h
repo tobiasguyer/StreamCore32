@@ -111,7 +111,7 @@ class QobuzStream : public bell::Task {
       out.push_back(B[(v >> 18) & 63]);
       out.push_back(B[(v >> 12) & 63]);
       out.push_back(have2 ? B[(v >> 6) & 63] : '\0');
-      out.push_back(have3 ? B[(v)&63] : '\0');
+      out.push_back(have3 ? B[(v) & 63] : '\0');
 
       if (!have2) {
         out.pop_back();

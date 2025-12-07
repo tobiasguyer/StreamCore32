@@ -25,7 +25,7 @@ using namespace spotify;
 template <typename T>
 T extractData(const std::vector<uint8_t>& data, size_t& pos) {
   static_assert(std::is_integral<T>::value,
-    "extractData only supports integral types");
+                "extractData only supports integral types");
 
   // Check that we have enough bytes to extract
   if (pos + sizeof(T) > data.size()) {
@@ -39,21 +39,19 @@ T extractData(const std::vector<uint8_t>& data, size_t& pos) {
   // Convert to host byte order based on the size of T
   if constexpr (sizeof(T) == 2) {
     return ntohs(value);
-  }
-  else if constexpr (sizeof(T) == 4) {
+  } else if constexpr (sizeof(T) == 4) {
     return ntohl(value);
-  }
-  else if constexpr (sizeof(T) == 8) {
+  } else if constexpr (sizeof(T) == 8) {
     return hton64(
-      value);  // Assuming you have defined `hton64` similarly to `htonl` for 64-bit values
-  }
-  else {
+        value);  // Assuming you have defined `hton64` similarly to `htonl` for 64-bit values
+  } else {
     return 0;  //   static_assert(false, "Unsupported type size for extractData");
   }
 }
 
 MercurySession::MercurySession(std::shared_ptr<TimeProvider> timeProvider)
-  : bell::Task("spotify_mercury_session", 8 * 1024, 3, 1) {  //double the size for reconnecting
+    : bell::Task("spotify_mercury_session", 8 * 1024, 3,
+                 1) {  //double the size for reconnecting
   responseSemaphore = std::make_shared<bell::WrappedSemaphore>();
   this->timeProvider = timeProvider;
 }
@@ -87,8 +85,7 @@ bool MercurySession::processPackets() {
 
       this->lastPingTimestamp = timeProvider->getSyncedTimestamp();
       this->shanConn->sendPacket(0x49, packet.data);
-    }
-    else if (packet.data.size()) {
+    } else if (packet.data.size()) {
       std::unique_lock<std::mutex> lock(queueMutex);
       this->packetQueue.push_back(packet);
       this->lastPingTimestamp = timeProvider->getSyncedTimestamp();
@@ -96,18 +93,15 @@ bool MercurySession::processPackets() {
       this->responseSemaphore->give();
     }
     return true;
-  }
-  catch (const std::runtime_error& e) {
+  } catch (const std::runtime_error& e) {
     SC32_LOG(error, "Error while receiving packet: %s", e.what());
     failAllPending();  // Fail all pending requests
     return false;
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     SC32_LOG(error, "Unexpected exception: %s", e.what());
     failAllPending();  // Fail all pending requests
     return false;
-  }
-  catch (...) {
+  } catch (...) {
     SC32_LOG(error, "Unknown error occurred while receiving packet.");
     failAllPending();  // Fail all pending requests
     return false;
@@ -141,8 +135,7 @@ void MercurySession::reconnect() {
       isReconnecting = false;
       this->executeEstabilishedCallback = true;
       return;  // Successful connection, exit loop
-    }
-    catch (...) {
+    } catch (...) {
       SC32_LOG(error, "Cannot reconnect, will retry in 5s");
       BELL_SLEEP_MS(1000);
       if (!isRunning) {  // Stop retrying if session is not running
@@ -153,7 +146,7 @@ void MercurySession::reconnect() {
 }
 
 void MercurySession::setConnectedHandler(
-  ConnectionEstabilishedCallback callback) {
+    ConnectionEstabilishedCallback callback) {
   this->connectionReadyCallback = callback;
 }
 
@@ -200,7 +193,8 @@ std::string MercurySession::getCountryCode() {
 }
 
 void MercurySession::handlePacket() {
-  if (!this->responseSemaphore->twait(200)) return;
+  if (!this->responseSemaphore->twait(200))
+    return;
   std::unique_lock<std::mutex> lock(queueMutex);
   if (!packetQueue.size())
     return;
@@ -214,70 +208,74 @@ void MercurySession::handlePacket() {
   }
 
   switch (static_cast<RequestType>(packet.command)) {
-  case RequestType::COUNTRY_CODE_RESPONSE: {
-    this->countryCode = std::string();
-    this->countryCode.resize(2);
-    memcpy(this->countryCode.data(), packet.data.data(), 2);
-    SC32_LOG(debug, "Received country code %s", this->countryCode.c_str());
-    break;
-  }
-  case RequestType::AUDIO_KEY_FAILURE_RESPONSE:
-  case RequestType::AUDIO_KEY_SUCCESS_RESPONSE: {
-    // this->lastRequestTimestamp = -1;
-
-    // First four bytes mark the sequence id
-    auto seqId = ntohl(extract<uint32_t>(packet.data, 0));
-
-    if (this->audioKeyCallbacks.count(seqId) > 0) {
-      auto success = static_cast<RequestType>(packet.command) ==
-        RequestType::AUDIO_KEY_SUCCESS_RESPONSE;
-      this->audioKeyCallbacks[seqId](success, packet.data);
+    case RequestType::COUNTRY_CODE_RESPONSE: {
+      this->countryCode = std::string();
+      this->countryCode.resize(2);
+      memcpy(this->countryCode.data(), packet.data.data(), 2);
+      SC32_LOG(debug, "Received country code %s", this->countryCode.c_str());
+      break;
     }
-    break;
-  }
-  case RequestType::SEND:
-  case RequestType::SUB:
-  case RequestType::UNSUB: {
-    auto response = this->decodeResponse(packet.data);
-    if (!response.fail) {
-      std::unique_lock<std::mutex> lock(callbackMutex);
-      std::function<void(Response)> callbackToExecute = nullptr;
-      auto it = this->callbacks.find(response.sequenceId);
-      if (it != this->callbacks.end()) {
-        callbackToExecute = std::move(it->second);  // Move the callback out of the map
-        this->callbacks.erase(it);  // Remove the callback entry from the map
+    case RequestType::AUDIO_KEY_FAILURE_RESPONSE:
+    case RequestType::AUDIO_KEY_SUCCESS_RESPONSE: {
+      // this->lastRequestTimestamp = -1;
+
+      // First four bytes mark the sequence id
+      auto seqId = ntohl(extract<uint32_t>(packet.data, 0));
+
+      if (this->audioKeyCallbacks.count(seqId) > 0) {
+        auto success = static_cast<RequestType>(packet.command) ==
+                       RequestType::AUDIO_KEY_SUCCESS_RESPONSE;
+        this->audioKeyCallbacks[seqId](success, packet.data);
       }
-      lock.unlock();
-      if (callbackToExecute) {
-        callbackToExecute(response);
-      }
-      else {
-        SC32_LOG(debug, "Callback not found for sequence id %d", response.sequenceId);
-        if (response.mercuryHeader.uri) SC32_LOG(debug, "Response URI: %s", response.mercuryHeader.uri);
-        if (response.mercuryHeader.method) SC32_LOG(debug, "Response method: %s", response.mercuryHeader.method);
-      }
-      pb_release(Header_fields, &response.mercuryHeader);
+      break;
     }
-    break;
-  }
-  case RequestType::SUBRES: {
-    auto response = decodeResponse(packet.data);
-    if (!response.fail) {
-      std::unique_lock<std::mutex> lock(callbackMutex);
-      std::string uri(response.mercuryHeader.uri);
-      for (const auto& [subUri, callback] : subscriptions) {
-        if (uri.find(subUri) != std::string::npos) {
-          lock.unlock();
-          callback(response);
-          break;
+    case RequestType::SEND:
+    case RequestType::SUB:
+    case RequestType::UNSUB: {
+      auto response = this->decodeResponse(packet.data);
+      if (!response.fail) {
+        std::unique_lock<std::mutex> lock(callbackMutex);
+        std::function<void(Response)> callbackToExecute = nullptr;
+        auto it = this->callbacks.find(response.sequenceId);
+        if (it != this->callbacks.end()) {
+          callbackToExecute =
+              std::move(it->second);  // Move the callback out of the map
+          this->callbacks.erase(it);  // Remove the callback entry from the map
         }
+        lock.unlock();
+        if (callbackToExecute) {
+          callbackToExecute(response);
+        } else {
+          SC32_LOG(debug, "Callback not found for sequence id %d",
+                   response.sequenceId);
+          if (response.mercuryHeader.uri)
+            SC32_LOG(debug, "Response URI: %s", response.mercuryHeader.uri);
+          if (response.mercuryHeader.method)
+            SC32_LOG(debug, "Response method: %s",
+                     response.mercuryHeader.method);
+        }
+        pb_release(Header_fields, &response.mercuryHeader);
       }
-      pb_release(Header_fields, &response.mercuryHeader);
+      break;
     }
-    break;
-  }
-  default:
-    break;
+    case RequestType::SUBRES: {
+      auto response = decodeResponse(packet.data);
+      if (!response.fail) {
+        std::unique_lock<std::mutex> lock(callbackMutex);
+        std::string uri(response.mercuryHeader.uri);
+        for (const auto& [subUri, callback] : subscriptions) {
+          if (uri.find(subUri) != std::string::npos) {
+            lock.unlock();
+            callback(response);
+            break;
+          }
+        }
+        pb_release(Header_fields, &response.mercuryHeader);
+      }
+      break;
+    }
+    default:
+      break;
   }
 }
 
@@ -296,7 +294,7 @@ void MercurySession::failAllPending() {
 }
 
 MercurySession::Response MercurySession::decodeResponse(
-  const std::vector<uint8_t>& data) {
+    const std::vector<uint8_t>& data) {
   size_t pos = 0;
   auto sequenceLength = extractData<uint16_t>(data, pos);
   uint64_t sequenceId;
@@ -316,8 +314,8 @@ MercurySession::Response MercurySession::decodeResponse(
   pos++;
   uint16_t parts = extractData<uint16_t>(data, pos);
   auto partial = std::find_if(
-    partials.begin(), partials.end(),
-    [sequenceId](const Response& p) { return p.sequenceId == sequenceId; });
+      partials.begin(), partials.end(),
+      [sequenceId](const Response& p) { return p.sequenceId == sequenceId; });
   if (partial == partials.end()) {
     if (flag == 2)
       return resp;
@@ -333,10 +331,10 @@ MercurySession::Response MercurySession::decodeResponse(
     auto partSize = extractData<uint16_t>(data, pos);
     if (partial->mercuryHeader.uri == NULL) {
       auto headerBytes = std::vector<uint8_t>(data.begin() + pos,
-        data.begin() + pos + partSize);
+                                              data.begin() + pos + partSize);
       pbDecode(partial->mercuryHeader, Header_fields, headerBytes);
       pb_istream_t stream =
-        pb_istream_from_buffer(&headerBytes[0], headerBytes.size());
+          pb_istream_from_buffer(&headerBytes[0], headerBytes.size());
 
       // Decode the message
       if (pb_decode(&stream, Header_fields, &partial->mercuryHeader) == false) {
@@ -344,20 +342,19 @@ MercurySession::Response MercurySession::decodeResponse(
         partials.erase(partial);
         return resp;
       }
-    }
-    else {
+    } else {
       if (index >= partial->parts.size())
         partial->parts.push_back(std::vector<uint8_t>{});
       partial->parts[index].insert(partial->parts[index].end(),
-        data.begin() + pos,
-        data.begin() + pos + partSize);
+                                   data.begin() + pos,
+                                   data.begin() + pos + partSize);
       index++;
     }
     pos += partSize;
     parts--;
   }
   if (flag == static_cast<uint8_t>(ResponseFlag::FINAL) &&
-    partial->mercuryHeader.uri != NULL) {
+      partial->mercuryHeader.uri != NULL) {
     resp = std::move(*partial);
     partials.erase(partial);
     resp.fail = false;
@@ -366,15 +363,15 @@ MercurySession::Response MercurySession::decodeResponse(
 }
 
 void MercurySession::addSubscriptionListener(const std::string& uri,
-  ResponseCallback subscription) {
-  this->subscriptions.insert({ uri, subscription });
+                                             ResponseCallback subscription) {
+  this->subscriptions.insert({uri, subscription});
 }
 
 uint64_t MercurySession::executeSubscription(RequestType method,
-  const std::string& uri,
-  ResponseCallback callback,
-  ResponseCallback subscription,
-  DataParts& payload) {
+                                             const std::string& uri,
+                                             ResponseCallback callback,
+                                             ResponseCallback subscription,
+                                             DataParts& payload) {
   while (isReconnecting)
     BELL_SLEEP_MS(100);
 
@@ -385,12 +382,12 @@ uint64_t MercurySession::executeSubscription(RequestType method,
 
   // Map logical request type to the appropriate wire request type (SEND for POST, GET, PUT)
   if (method == RequestType::GET || method == RequestType::POST ||
-    method == RequestType::PUT) {
+      method == RequestType::PUT) {
     method = RequestType::SEND;
   }
 
   if (method == RequestType::SUB) {
-    this->subscriptions.insert({ uri, subscription });
+    this->subscriptions.insert({uri, subscription});
   }
 
   auto headerBytes = pbEncode(Header_fields, &tempMercuryHeader);
@@ -399,12 +396,12 @@ uint64_t MercurySession::executeSubscription(RequestType method,
   {
     std::unique_lock<std::mutex> lock(callbackMutex);
     if (callback != nullptr)
-      this->callbacks.insert({ sequenceId, callback });
+      this->callbacks.insert({sequenceId, callback});
   }
   // Prepare the data packet structure:
   // [Sequence size] [SequenceId] [0x1] [Payloads number] [Header size] [Header] [Payloads (size + data)]
   auto sequenceIdBytes =
-    prepareSequenceIdPayload(sequenceId, headerBytes, payload);
+      prepareSequenceIdPayload(sequenceId, headerBytes, payload);
 
   // Bump sequence ID for the next request
   this->sequenceId += 1;
@@ -413,10 +410,9 @@ uint64_t MercurySession::executeSubscription(RequestType method,
     while (isReconnecting)
       BELL_SLEEP_MS(100);
     this->shanConn->sendPacket(
-      static_cast<std::underlying_type<RequestType>::type>(method),
-      sequenceIdBytes);
-  }
-  catch (...) {
+        static_cast<std::underlying_type<RequestType>::type>(method),
+        sequenceIdBytes);
+  } catch (...) {
     // @TODO: handle disconnect properly
   }
 
@@ -424,33 +420,33 @@ uint64_t MercurySession::executeSubscription(RequestType method,
 }
 
 std::vector<uint8_t> MercurySession::prepareSequenceIdPayload(
-  uint64_t sequenceId, const std::vector<uint8_t>& headerBytes,
-  const DataParts& payload) {
+    uint64_t sequenceId, const std::vector<uint8_t>& headerBytes,
+    const DataParts& payload) {
   // Pack sequenceId
   auto sequenceIdBytes = pack<uint64_t>(hton64(sequenceId));
   auto sequenceSizeBytes = pack<uint16_t>(htons(sequenceIdBytes.size()));
 
   // Initial parts of the packet
   sequenceIdBytes.insert(sequenceIdBytes.begin(), sequenceSizeBytes.begin(),
-    sequenceSizeBytes.end());
+                         sequenceSizeBytes.end());
   sequenceIdBytes.push_back(0x01);
 
   auto payloadNum = pack<uint16_t>(htons(payload.size() + 1));
   sequenceIdBytes.insert(sequenceIdBytes.end(), payloadNum.begin(),
-    payloadNum.end());
+                         payloadNum.end());
 
   // Encode the header size and the header data
   auto headerSizePayload = pack<uint16_t>(htons(headerBytes.size()));
   sequenceIdBytes.insert(sequenceIdBytes.end(), headerSizePayload.begin(),
-    headerSizePayload.end());
+                         headerSizePayload.end());
   sequenceIdBytes.insert(sequenceIdBytes.end(), headerBytes.begin(),
-    headerBytes.end());
+                         headerBytes.end());
 
   // Encode all the payload parts
   for (const auto& part : payload) {
     headerSizePayload = pack<uint16_t>(htons(part.size()));
     sequenceIdBytes.insert(sequenceIdBytes.end(), headerSizePayload.begin(),
-      headerSizePayload.end());
+                           headerSizePayload.end());
     sequenceIdBytes.insert(sequenceIdBytes.end(), part.begin(), part.end());
   }
 
@@ -458,20 +454,20 @@ std::vector<uint8_t> MercurySession::prepareSequenceIdPayload(
 }
 
 uint32_t MercurySession::requestAudioKey(const std::vector<uint8_t>& trackId,
-  const std::vector<uint8_t>& fileId,
-  AudioKeyCallback audioCallback) {
+                                         const std::vector<uint8_t>& fileId,
+                                         AudioKeyCallback audioCallback) {
   auto buffer = fileId;
 
   std::unique_lock<std::mutex> lock(callbackMutex);
   // Store callback
-  this->audioKeyCallbacks.insert({ this->audioKeySequence, audioCallback });
+  this->audioKeyCallbacks.insert({this->audioKeySequence, audioCallback});
   lock.unlock();
   // Structure: [FILEID] [TRACKID] [4 BYTES SEQUENCE ID] [0x00, 0x00]
   buffer.insert(buffer.end(), trackId.begin(), trackId.end());
   auto audioKeySequenceBuffer = pack<uint32_t>(htonl(this->audioKeySequence));
   buffer.insert(buffer.end(), audioKeySequenceBuffer.begin(),
-    audioKeySequenceBuffer.end());
-  auto suffix = std::vector<uint8_t>({ 0x00, 0x00 });
+                audioKeySequenceBuffer.end());
+  auto suffix = std::vector<uint8_t>({0x00, 0x00});
   buffer.insert(buffer.end(), suffix.begin(), suffix.end());
 
   // Bump audio key sequence
@@ -481,9 +477,8 @@ uint32_t MercurySession::requestAudioKey(const std::vector<uint8_t>& trackId,
   // this->lastRequestTimestamp = timeProvider->getSyncedTimestamp();
   try {
     this->shanConn->sendPacket(
-      static_cast<uint8_t>(RequestType::AUDIO_KEY_REQUEST_COMMAND), buffer);
-  }
-  catch (...) {
+        static_cast<uint8_t>(RequestType::AUDIO_KEY_REQUEST_COMMAND), buffer);
+  } catch (...) {
     // @TODO: Handle disconnect
   }
   return audioKeySequence - 1;

@@ -11,9 +11,9 @@
 #include "BellTask.h"
 #include "BellUtils.h"  // for BELL_SLEEP_MS
 #include "CDNAudioFile.h"
-#include "SpotifyContext.h"
 #include "HTTPClient.h"
 #include "Logger.h"
+#include "SpotifyContext.h"
 #include "Utils.h"
 #include "WrappedSemaphore.h"
 #ifdef BELL_ONLY_CJSON
@@ -27,55 +27,54 @@
 using namespace spotify;
 static bell::WrappedSemaphore* processSemaphore_ = nullptr;
 namespace TrackDataUtils {
-  bool countryListContains(char* countryList, const char* country) {
-    uint16_t countryList_length = strlen(countryList);
-    for (int x = 0; x < countryList_length; x += 2) {
-      if (countryList[x] == country[0] && countryList[x + 1] == country[1]) {
-        return true;
-      }
+bool countryListContains(char* countryList, const char* country) {
+  uint16_t countryList_length = strlen(countryList);
+  for (int x = 0; x < countryList_length; x += 2) {
+    if (countryList[x] == country[0] && countryList[x + 1] == country[1]) {
+      return true;
     }
-    return false;
+  }
+  return false;
+}
+
+bool doRestrictionsApply(Restriction* restrictions, int count,
+                         const char* country) {
+  for (int x = 0; x < count; x++) {
+    if (restrictions[x].countries_allowed != nullptr) {
+      return !countryListContains(restrictions[x].countries_allowed, country);
+    }
+
+    if (restrictions[x].countries_forbidden != nullptr) {
+      return countryListContains(restrictions[x].countries_forbidden, country);
+    }
   }
 
-  bool doRestrictionsApply(Restriction* restrictions, int count,
-    const char* country) {
-    for (int x = 0; x < count; x++) {
-      if (restrictions[x].countries_allowed != nullptr) {
-        return !countryListContains(restrictions[x].countries_allowed, country);
-      }
+  return false;
+}
 
-      if (restrictions[x].countries_forbidden != nullptr) {
-        return countryListContains(restrictions[x].countries_forbidden, country);
-      }
-    }
+bool canPlayTrack(Track& trackInfo, int altIndex, const char* country) {
+  if (altIndex < 0) {
 
-    return false;
-  }
-
-  bool canPlayTrack(Track& trackInfo, int altIndex, const char* country) {
-    if (altIndex < 0) {
-
-    }
-    else {
-      for (int x = 0; x < trackInfo.alternative[altIndex].restriction_count;
-        x++) {
-        if (trackInfo.alternative[altIndex].restriction[x].countries_allowed !=
+  } else {
+    for (int x = 0; x < trackInfo.alternative[altIndex].restriction_count;
+         x++) {
+      if (trackInfo.alternative[altIndex].restriction[x].countries_allowed !=
           nullptr) {
-          return countryListContains(
+        return countryListContains(
             trackInfo.alternative[altIndex].restriction[x].countries_allowed,
             country);
-        }
+      }
 
-        if (trackInfo.alternative[altIndex].restriction[x].countries_forbidden !=
+      if (trackInfo.alternative[altIndex].restriction[x].countries_forbidden !=
           nullptr) {
-          return !countryListContains(
+        return !countryListContains(
             trackInfo.alternative[altIndex].restriction[x].countries_forbidden,
             country);
-        }
       }
     }
-    return true;
   }
+  return true;
+}
 }  // namespace TrackDataUtils
 
 void TrackInfo::loadPbTrack(Track* pbTrack, const std::vector<uint8_t>& gid) {
@@ -94,9 +93,11 @@ void TrackInfo::loadPbTrack(Track* pbTrack, const std::vector<uint8_t>& gid) {
     album = std::string(pbTrack->album.name);
 
     if (pbTrack->album.has_cover_group &&
-      pbTrack->album.cover_group.image_count > 0) {
+        pbTrack->album.cover_group.image_count > 0) {
       auto imageId =
-        pbArrayToVector(pbTrack->album.cover_group.image[pbTrack->album.cover_group.image_count - 1].file_id);
+          pbArrayToVector(pbTrack->album.cover_group
+                              .image[pbTrack->album.cover_group.image_count - 1]
+                              .file_id);
       imageUrl = "https://i.scdn.co/image/" + bytesToHexString(imageId);
     }
   }
@@ -107,7 +108,7 @@ void TrackInfo::loadPbTrack(Track* pbTrack, const std::vector<uint8_t>& gid) {
 }
 
 void TrackInfo::loadPbEpisode(Episode* pbEpisode,
-  const std::vector<uint8_t>& gid) {
+                              const std::vector<uint8_t>& gid) {
   // Generate ID based on GID
   trackId = bytesToHexString(gid);
 
@@ -115,7 +116,8 @@ void TrackInfo::loadPbEpisode(Episode* pbEpisode,
 
   if (pbEpisode->covers.image_count > 0) {
     // Handle episode info
-    auto imageId = pbArrayToVector(pbEpisode->covers.image[pbEpisode->covers.image_count - 1].file_id);
+    auto imageId = pbArrayToVector(
+        pbEpisode->covers.image[pbEpisode->covers.image_count - 1].file_id);
     imageUrl = "https://i.scdn.co/image/" + bytesToHexString(imageId);
   }
 
@@ -124,10 +126,12 @@ void TrackInfo::loadPbEpisode(Episode* pbEpisode,
   duration = pbEpisode->duration;
 }
 
-QueuedTrack::QueuedTrack(player_proto_connect_ProvidedTrack& ref, std::shared_ptr<spotify::Context> ctx,
-  std::shared_ptr<bell::WrappedSemaphore> playableSemaphore,
-  int64_t requestedPosition)
-  : requestedPosition((uint32_t)requestedPosition), ctx(ctx) {
+QueuedTrack::QueuedTrack(
+    player_proto_connect_ProvidedTrack& ref,
+    std::shared_ptr<spotify::Context> ctx,
+    std::shared_ptr<bell::WrappedSemaphore> playableSemaphore,
+    int64_t requestedPosition)
+    : requestedPosition((uint32_t)requestedPosition), ctx(ctx) {
   trackMetrics = std::make_shared<TrackMetrics>(ctx, requestedPosition);
   this->playableSemaphore = playableSemaphore;
   this->ref = ref;
@@ -136,11 +140,9 @@ QueuedTrack::QueuedTrack(player_proto_connect_ProvidedTrack& ref, std::shared_pt
   for (int i = 0; i < ref.full_metadata_count; i++) {
     if (strcmp(ref.metadata[i].key, "page_instance_id") == 0) {
       this->trackInfo.page_instance_id = ref.metadata[i].value;
-    }
-    else if (strcmp(ref.metadata[i].key, "interaction_id") == 0) {
+    } else if (strcmp(ref.metadata[i].key, "interaction_id") == 0) {
       this->trackInfo.interaction_id = ref.metadata[i].value;
-    }
-    else if (strcmp(ref.metadata[i].key, "decision_id") == 0) {
+    } else if (strcmp(ref.metadata[i].key, "decision_id") == 0) {
       this->trackInfo.decision_id = ref.metadata[i].value;
     }
   }
@@ -148,8 +150,7 @@ QueuedTrack::QueuedTrack(player_proto_connect_ProvidedTrack& ref, std::shared_pt
     this->gid = base62Decode(ref.uri);
     state = State::QUEUED;
     processSemaphore_->give();
-  }
-  else {
+  } else {
     cancelLoading();
   }
 }
@@ -157,7 +158,8 @@ QueuedTrack::QueuedTrack(player_proto_connect_ProvidedTrack& ref, std::shared_pt
 QueuedTrack::~QueuedTrack() {
   //if (state < State::READY)
   //  playableSemaphore->give();
-  if (state < State::READY) state = State::FAILED;
+  if (state < State::READY)
+    state = State::FAILED;
 
   if (pendingMercuryRequest != 0) {
     ctx->session->unregister(pendingMercuryRequest);
@@ -199,12 +201,12 @@ bool QueuedTrack::stepParseMetadata(Track* pbTrack, Episode* pbEpisode) {
 
     // Check if we can play the track, if not, try alternatives
     if (TrackDataUtils::doRestrictionsApply(
-      pbTrack->restriction, pbTrack->restriction_count, countryCode)) {
+            pbTrack->restriction, pbTrack->restriction_count, countryCode)) {
       // Go through alternatives
       for (int x = 0; x < pbTrack->alternative_count; x++) {
         if (!TrackDataUtils::doRestrictionsApply(
-          pbTrack->alternative[x].restriction,
-          pbTrack->alternative[x].restriction_count, countryCode)) {
+                pbTrack->alternative[x].restriction,
+                pbTrack->alternative[x].restriction_count, countryCode)) {
           SC32_LOG(info, "Found alternative track");
           selectedFiles = pbTrack->alternative[x].file;
           filesCount = pbTrack->alternative[x].file_count;
@@ -212,8 +214,7 @@ bool QueuedTrack::stepParseMetadata(Track* pbTrack, Episode* pbEpisode) {
           break;
         }
       }
-    }
-    else {
+    } else {
       // We can play the track
       selectedFiles = pbTrack->file;
       filesCount = pbTrack->file_count;
@@ -224,14 +225,13 @@ bool QueuedTrack::stepParseMetadata(Track* pbTrack, Episode* pbEpisode) {
       // Load track information
       trackInfo.loadPbTrack(pbTrack, trackId);
     }
-  }
-  else {
+  } else {
     // Handle episodes
 
     // Check if we can play the episode
     if (!TrackDataUtils::doRestrictionsApply(pbEpisode->restriction,
-      pbEpisode->restriction_count,
-      countryCode)) {
+                                             pbEpisode->restriction_count,
+                                             countryCode)) {
       selectedFiles = pbEpisode->file;
       filesCount = pbEpisode->file_count;
       trackId = pbArrayToVector(pbEpisode->gid);
@@ -253,7 +253,7 @@ bool QueuedTrack::stepParseMetadata(Track* pbTrack, Episode* pbEpisode) {
 
     // Fallback to OGG Vorbis 96kbps
     if (fileId.size() == 0 &&
-      selectedFiles[x].format == AudioFormat_OGG_VORBIS_96) {
+        selectedFiles[x].format == AudioFormat_OGG_VORBIS_96) {
       fileId = pbArrayToVector(selectedFiles[x].file_id);
       SC32_LOG(info, "Falling back to OGG Vorbis 96kbps");
     }
@@ -270,23 +270,22 @@ bool QueuedTrack::stepParseMetadata(Track* pbTrack, Episode* pbEpisode) {
 }
 
 void QueuedTrack::stepLoadAudioFile(
-  std::mutex& trackListMutex,
-  std::shared_ptr<bell::WrappedSemaphore> updateSemaphore) {
+    std::mutex& trackListMutex,
+    std::shared_ptr<bell::WrappedSemaphore> updateSemaphore) {
   // Request audio key
   this->pendingAudioKeyRequest = ctx->session->requestAudioKey(
-    trackId, fileId,
-    [this, &trackListMutex, updateSemaphore](
-      bool success, const std::vector<uint8_t>& audioKey) {
+      trackId, fileId,
+      [this, &trackListMutex, updateSemaphore](
+          bool success, const std::vector<uint8_t>& audioKey) {
         std::scoped_lock lock(trackListMutex);
 
         if (success) {
           this->audioKey =
-            std::vector<uint8_t>(audioKey.begin() + 4, audioKey.end());
+              std::vector<uint8_t>(audioKey.begin() + 4, audioKey.end());
 
           state = State::CDN_REQUIRED;
           updateSemaphore->give();
-        }
-        else {
+        } else {
           SC32_LOG(error, "Failed to get audio key");
           retries++;
           state = State::KEY_REQUIRED;
@@ -295,13 +294,12 @@ void QueuedTrack::stepLoadAudioFile(
               audioFormat = (AudioFormat)(audioFormat - 1);
               state = State::QUEUED;
               updateSemaphore->give();
-            }
-            else {
+            } else {
               cancelLoading();
             }
           }
         }
-    });
+      });
 
   state = State::PENDING_KEY;
 }
@@ -317,12 +315,12 @@ void QueuedTrack::stepLoadCDNUrl(const std::string& accessKey) {
   try {
 
     std::string requestUrl = string_format(
-      "https://api.spotify.com/v1/storage-resolve/files/audio/interactive/"
-      "%s?alt=json",
-      bytesToHexString(fileId).c_str());
+        "https://api.spotify.com/v1/storage-resolve/files/audio/interactive/"
+        "%s?alt=json",
+        bytesToHexString(fileId).c_str());
     auto req = bell::HTTPClient::get(
-      requestUrl, { bell::HTTPClient::ValueHeader(
-                      {"Authorization", "Bearer " + accessKey}) });
+        requestUrl, {bell::HTTPClient::ValueHeader(
+                        {"Authorization", "Bearer " + accessKey})});
 
     // Wait for response
     std::string result = req->body_string();
@@ -334,7 +332,7 @@ void QueuedTrack::stepLoadCDNUrl(const std::string& accessKey) {
 #ifdef BELL_ONLY_CJSON
     cJSON* jsonResult = cJSON_Parse(result.data());
     cdnUrl = cJSON_GetArrayItem(cJSON_GetObjectItem(jsonResult, "cdnurl"), 0)
-      ->valuestring;
+                 ->valuestring;
     cJSON_Delete(jsonResult);
 #else
     auto jsonResult = nlohmann::json::parse(result);
@@ -343,8 +341,7 @@ void QueuedTrack::stepLoadCDNUrl(const std::string& accessKey) {
 
     // SC32_LOG(info, "Received CDN URL, %s", cdnUrl.c_str());
     state = State::READY;
-  }
-  catch (...) {
+  } catch (...) {
     SC32_LOG(error, "Cannot fetch CDN URL");
     state = State::FAILED;
   }
@@ -352,16 +349,16 @@ void QueuedTrack::stepLoadCDNUrl(const std::string& accessKey) {
 }
 
 void QueuedTrack::stepLoadMetadata(
-  Track* pbTrack, Episode* pbEpisode, std::mutex& trackListMutex,
-  std::shared_ptr<bell::WrappedSemaphore> updateSemaphore) {
+    Track* pbTrack, Episode* pbEpisode, std::mutex& trackListMutex,
+    std::shared_ptr<bell::WrappedSemaphore> updateSemaphore) {
   // Prepare request ID
   std::string requestUrl =
-    string_format("hm://metadata/3/%s/%s",
-      gid.first == SpotifyFileType::TRACK ? "track" : "episode",
-      bytesToHexString(gid.second).c_str());
+      string_format("hm://metadata/3/%s/%s",
+                    gid.first == SpotifyFileType::TRACK ? "track" : "episode",
+                    bytesToHexString(gid.second).c_str());
 
   auto responseHandler = [this, pbTrack, pbEpisode, &trackListMutex,
-    updateSemaphore](MercurySession::Response res) {
+                          updateSemaphore](MercurySession::Response res) {
     std::scoped_lock lock(trackListMutex);
 
     if (res.parts.size() == 0) {
@@ -374,8 +371,7 @@ void QueuedTrack::stepLoadMetadata(
     if (gid.first == SpotifyFileType::TRACK) {
       pb_release(Track_fields, pbTrack);
       ret = pbDecode(*pbTrack, Track_fields, res.parts[0]);
-    }
-    else {
+    } else {
       pb_release(Episode_fields, pbEpisode);
       ret = pbDecode(*pbEpisode, Episode_fields, res.parts[0]);
     }
@@ -392,11 +388,11 @@ void QueuedTrack::stepLoadMetadata(
       return;
     }
     updateSemaphore->give();
-    };
+  };
   // Execute the request
   if (pbTrack != NULL || pbEpisode != NULL)
     pendingMercuryRequest = ctx->session->execute(
-      MercurySession::RequestType::GET, requestUrl, responseHandler);
+        MercurySession::RequestType::GET, requestUrl, responseHandler);
   else {
     SC32_LOG(info, "Invalid Metadata");
     // Invalid metadata, cannot proceed
@@ -409,10 +405,11 @@ void QueuedTrack::stepLoadMetadata(
 }
 
 TrackQueue::TrackQueue(std::shared_ptr<spotify::Context> ctx)
-  : bell::Task("spotify_queue", 1024 * 12, 0, 1), ctx(ctx) {
+    : bell::Task("spotify_queue", 1024 * 12, 0, 1), ctx(ctx) {
   accessKeyFetcher = std::make_shared<spotify::AccessKeyFetcher>(ctx);
   processSemaphore = std::make_shared<bell::WrappedSemaphore>();
-  processSemaphore_ = static_cast<bell::WrappedSemaphore*>(processSemaphore.get());
+  processSemaphore_ =
+      static_cast<bell::WrappedSemaphore*>(processSemaphore.get());
   playableSemaphore = std::make_shared<bell::WrappedSemaphore>();
 
   // Start the task
@@ -462,7 +459,7 @@ void TrackQueue::stopTask() {
 }
 
 std::shared_ptr<QueuedTrack> TrackQueue::consumeTrack(
-  std::shared_ptr<QueuedTrack> prevTrack, int& offset) {
+    std::shared_ptr<QueuedTrack> prevTrack, int& offset) {
   std::scoped_lock lock(tracksMutex);
 
   if (!preloadedTracks.size()) {
@@ -471,13 +468,12 @@ std::shared_ptr<QueuedTrack> TrackQueue::consumeTrack(
   }
 
   auto prevTrackIter =
-    std::find(preloadedTracks.begin(), preloadedTracks.end(), prevTrack);
+      std::find(preloadedTracks.begin(), preloadedTracks.end(), prevTrack);
 
   if (prevTrackIter != preloadedTracks.end()) {
     // Get offset of next track
     offset = prevTrackIter - preloadedTracks.begin() + 1;
-  }
-  else {
+  } else {
     offset = 0;
   }
   if (offset >= preloadedTracks.size()) {
@@ -489,20 +485,20 @@ std::shared_ptr<QueuedTrack> TrackQueue::consumeTrack(
 
 bool TrackQueue::processTrack(std::shared_ptr<QueuedTrack> track) {
   switch (track->state) {
-  case QueuedTrack::State::QUEUED:
-    track->stepLoadMetadata(&track->pbTrack, &track->pbEpisode, tracksMutex,
-      processSemaphore);
-    break;
-  case QueuedTrack::State::KEY_REQUIRED:
-    track->stepLoadAudioFile(tracksMutex, processSemaphore);
-    break;
-  case QueuedTrack::State::CDN_REQUIRED:
-    track->stepLoadCDNUrl(accessKey);
-    break;
-  default:
-    return false;
-    // Do not perform any action
-    break;
+    case QueuedTrack::State::QUEUED:
+      track->stepLoadMetadata(&track->pbTrack, &track->pbEpisode, tracksMutex,
+                              processSemaphore);
+      break;
+    case QueuedTrack::State::KEY_REQUIRED:
+      track->stepLoadAudioFile(tracksMutex, processSemaphore);
+      break;
+    case QueuedTrack::State::CDN_REQUIRED:
+      track->stepLoadCDNUrl(accessKey);
+      break;
+    default:
+      return false;
+      // Do not perform any action
+      break;
   }
   return true;
 }

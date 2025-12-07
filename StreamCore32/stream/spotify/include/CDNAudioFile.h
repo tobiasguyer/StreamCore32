@@ -10,24 +10,24 @@
 #include "HTTPClient.h"  // for HTTPClient
 
 namespace bell {
-  class WrappedSemaphore;
+class WrappedSemaphore;
 }  // namespace bell
 
 namespace spotify {
-  class AccessKeyFetcher;
+class AccessKeyFetcher;
 
-  class CDNAudioFile {
+class CDNAudioFile {
 
-  public:
-    CDNAudioFile(const std::string& cdnUrl, const std::vector<uint8_t>& audioKey);
+ public:
+  CDNAudioFile(const std::string& cdnUrl, const std::vector<uint8_t>& audioKey);
 
 #ifndef CONFIG_BELL_NOCODEC
-    /**
+  /**
     * @brief Opens connection to the provided cdn url, and fetches track metadata.
     */
-    void openStream();
+  void openStream();
 
-    /**
+  /**
     * @brief Read and decrypt part of the cdn stream
     *
     * @param dst buffer where to read received data to
@@ -35,18 +35,18 @@ namespace spotify {
     *
     * @returns amount of bytes read
     */
-    size_t readBytes(uint8_t* dst, size_t bytes);
+  size_t readBytes(uint8_t* dst, size_t bytes);
 #else
-    /**
+  /**
     * @brief Opens connection to the provided cdn url, and fetches track header.
     *
     * @param header_size
     *
     * @returns char* where to read data from
     */
-    uint8_t* openStream(ssize_t&);
+  uint8_t* openStream(ssize_t&);
 
-    /**
+  /**
     * @brief Read and decrypt part of the cdn stream
     *
     * @param dst buffer where to read received data to
@@ -54,59 +54,60 @@ namespace spotify {
     *
     * @returns amount of bytes read
     */
-    long readBytes(uint8_t* dst, size_t bytes);
+  long readBytes(uint8_t* dst, size_t bytes);
 
 #endif
-    /**
+  /**
     * @brief Returns current position in CDN stream
     */
-    size_t getPosition();
+  size_t getPosition();
 
-    /**
+  /**
     * @brief returns total size of the audio file in bytes
     */
-    size_t getSize();
+  size_t getSize();
 
-    /**
+  /**
     * @brief Seeks the track to provided position
     * @param position position where to seek the track
     */
-    void seek(size_t position);
-    ssize_t readRangeToBuffer(size_t requestPosition, size_t length, uint8_t* outBuffer);
-    long getHeader();
+  void seek(size_t position);
+  ssize_t readRangeToBuffer(size_t requestPosition, size_t length,
+                            uint8_t* outBuffer);
+  long getHeader();
 
-  private:
-    const int OPUS_HEADER_SIZE = 8 * 1024;
-    const int OPUS_FOOTER_PREFFERED = 1024 * 12;  // 12K should be safe
-    const int SEEK_MARGIN_SIZE = 1024 * 4;
+ private:
+  const int OPUS_HEADER_SIZE = 8 * 1024;
+  const int OPUS_FOOTER_PREFFERED = 1024 * 12;  // 12K should be safe
+  const int SEEK_MARGIN_SIZE = 1024 * 4;
 
-    const int HTTP_BUFFER_SIZE = 1024 * 12;
-    const int SPOTIFY_OPUS_HEADER = 167;
-    std::unique_ptr<bell::HTTPClient::Response> response;
+  const int HTTP_BUFFER_SIZE = 1024 * 12;
+  const int SPOTIFY_OPUS_HEADER = 167;
+  std::unique_ptr<bell::HTTPClient::Response> response;
 #ifndef CONFIG_BELL_NOCODEC
-    // Used to store opus metadata, speeds up read
-    std::vector<uint8_t> header = std::vector<uint8_t>(OPUS_HEADER_SIZE);
-    std::vector<uint8_t> footer;
+  // Used to store opus metadata, speeds up read
+  std::vector<uint8_t> header = std::vector<uint8_t>(OPUS_HEADER_SIZE);
+  std::vector<uint8_t> footer;
 #endif
-    // General purpose buffer to read data
-    std::vector<uint8_t> httpBuffer = std::vector<uint8_t>(HTTP_BUFFER_SIZE);
+  // General purpose buffer to read data
+  std::vector<uint8_t> httpBuffer = std::vector<uint8_t>(HTTP_BUFFER_SIZE);
 
-    // AES IV for decrypting the audio stream
-    const std::vector<uint8_t> audioAESIV = { 0x72, 0xe0, 0x67, 0xfb, 0xdd, 0xcb,
-                                             0xcf, 0x77, 0xeb, 0xe8, 0xbc, 0x64,
-                                             0x3f, 0x63, 0x0d, 0x93 };
-    std::unique_ptr<Crypto> crypto;
+  // AES IV for decrypting the audio stream
+  const std::vector<uint8_t> audioAESIV = {0x72, 0xe0, 0x67, 0xfb, 0xdd, 0xcb,
+                                           0xcf, 0x77, 0xeb, 0xe8, 0xbc, 0x64,
+                                           0x3f, 0x63, 0x0d, 0x93};
+  std::unique_ptr<Crypto> crypto;
 
-    size_t position = 0;
-    size_t totalFileSize = 0;
-    size_t lastRequestPosition = 0;
-    size_t lastRequestCapacity = 0;
+  size_t position = 0;
+  size_t totalFileSize = 0;
+  size_t lastRequestPosition = 0;
+  size_t lastRequestCapacity = 0;
 
-    bool enableRequestMargin = false;
+  bool enableRequestMargin = false;
 
-    std::string cdnUrl;
-    std::vector<uint8_t> audioKey;
+  std::string cdnUrl;
+  std::vector<uint8_t> audioKey;
 
-    void decrypt(uint8_t* dst, size_t nbytes, size_t pos);
-  };
+  void decrypt(uint8_t* dst, size_t nbytes, size_t pos);
+};
 }  // namespace spotify

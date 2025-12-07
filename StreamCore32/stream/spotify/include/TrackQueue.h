@@ -12,9 +12,9 @@
 #include "TrackReference.h"
 #include "Utils.h"
 
+#include "WrappedSemaphore.h"
 #include "protobuf/connect.pb.h"   // for ProvidedTrack
 #include "protobuf/metadata.pb.h"  // for Track, _Track, AudioFile, Episode
-#include "WrappedSemaphore.h"
 
 namespace spotify {
 struct Context;
@@ -23,7 +23,8 @@ class CDNAudioFile;
 
 // Used in got track info event
 struct TrackInfo {
-  std::string name, album, artist, imageUrl, trackId, provider, page_instance_id, interaction_id, decision_id;
+  std::string name, album, artist, imageUrl, trackId, provider,
+      page_instance_id, interaction_id, decision_id;
   uint32_t duration, number, discNumber;
   void loadPbTrack(Track* pbTrack, const std::vector<uint8_t>& gid);
   void loadPbEpisode(Episode* pbEpisode, const std::vector<uint8_t>& gid);
@@ -31,7 +32,8 @@ struct TrackInfo {
 
 class QueuedTrack {
  public:
-  QueuedTrack(player_proto_connect_ProvidedTrack& ref, std::shared_ptr<spotify::Context> ctx,
+  QueuedTrack(player_proto_connect_ProvidedTrack& ref,
+              std::shared_ptr<spotify::Context> ctx,
               std::shared_ptr<bell::WrappedSemaphore> playableSemaphore,
               int64_t requestedPosition = 0);
   ~QueuedTrack();

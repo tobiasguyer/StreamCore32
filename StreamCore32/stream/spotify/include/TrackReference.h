@@ -47,14 +47,16 @@ struct TrackReference {
   static bool pbDecodeProvidedTracks(pb_istream_t* stream,
                                      const pb_field_t* field, void** arg);
 
-  static void clearProvidedTracklist(std::vector<player_proto_connect_ProvidedTrack>* tracklist) {
+  static void clearProvidedTracklist(
+      std::vector<player_proto_connect_ProvidedTrack>* tracklist) {
     for (auto& track : *tracklist)
       pbReleaseProvidedTrack(&track);
     tracklist->clear();
   }
 
-  static void deleteTracksInRange(std::vector<player_proto_connect_ProvidedTrack>* tracks,
-                                  size_t start, size_t end) {
+  static void deleteTracksInRange(
+      std::vector<player_proto_connect_ProvidedTrack>* tracks, size_t start,
+      size_t end) {
     // Sanity check for the range bounds
     if (start >= tracks->size() || end >= tracks->size() || start > end) {
       return;  // Invalid range
@@ -68,13 +70,13 @@ struct TrackReference {
     tracks->erase(tracks->begin() + start, tracks->begin() + end + 1);
   }
 
-  static void pbReleaseProvidedTrack(player_proto_connect_ProvidedTrack* track) {
-    
+  static void pbReleaseProvidedTrack(
+      player_proto_connect_ProvidedTrack* track) {
+
     if (track->metadata_count < track->full_metadata_count)
       track->metadata_count = track->full_metadata_count;
-      
+
     pb_release(player_proto_connect_ProvidedTrack_fields, track);
-    
   }
 };
 }  // namespace spotify

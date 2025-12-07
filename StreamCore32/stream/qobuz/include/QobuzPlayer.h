@@ -1,49 +1,47 @@
 #pragma once
-#include "StreamBase.h"
-#include "HTTPClient.h"
-#include "URLParser.h"
+#include <algorithm>
 #include <atomic>
-#include <vector>
-#include <limits>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <memory>
-#include <algorithm>
+#include <vector>
+#include "HTTPClient.h"
+#include "StreamBase.h"
+#include "URLParser.h"
 
-#include "TimeSync.h"
 #include "Heartbeat.h"
+#include "TimeSync.h"
 
-#include "QobuzTrack.h"
 #include "QobuzQueue.h"
+#include "QobuzTrack.h"
 
 #include "Logger.h"
 
 class QobuzPlayer : public StreamBase {
-public:
-
+ public:
   using OnUiMessage = std::function<void(const std::string&)>;
 
   using OnWsMessage = std::function<void(_qconnect_QConnectMessage*, size_t)>;
 
   using OnQobuzGet = std::function<std::unique_ptr<bell::HTTPClient::Response>(
-    const std::string& object, //session, user, file
-    const std::string& action, // start, url...
-    const std::vector<std::pair<std::string, std::string>>& params,
-    bool sign
-  )>;
+      const std::string& object,  //session, user, file
+      const std::string& action,  // start, url...
+      const std::vector<std::pair<std::string, std::string>>& params,
+      bool sign)>;
 
   using OnQobuzPost = std::function<std::unique_ptr<bell::HTTPClient::Response>(
-    const std::string& object,
-    const std::string& action,
-    const std::string& body,
-    const std::vector<std::pair<std::string, std::string>>& params,
-    bool sign
-  )>;
+      const std::string& object, const std::string& action,
+      const std::string& body,
+      const std::vector<std::pair<std::string, std::string>>& params,
+      bool sign)>;
 
-  QobuzPlayer(std::shared_ptr<AudioControl> audio, std::shared_ptr<qobuz::QobuzQueue> queue);
+  QobuzPlayer(std::shared_ptr<AudioControl> audio,
+              std::shared_ptr<qobuz::QobuzQueue> queue);
   ~QobuzPlayer() {
     stopTask();
-    while (hb_) BELL_SLEEP_MS(50);
+    while (hb_)
+      BELL_SLEEP_MS(50);
     pb_release(qconnect_QueueRendererState_fields, &player_state);
     std::scoped_lock lock(isRunningMutex_);
   }
@@ -56,9 +54,13 @@ public:
     current_track_playing->skipTo_.store(offset);
     current_track_playing->wantSkip_.store(true);
   }
-  void setEOF(bool v = true) { eofMode_.store(v); }  // if true, do not auto-resume after EOF
+  void setEOF(bool v = true) {
+    eofMode_.store(v);
+  }  // if true, do not auto-resume after EOF
   bool eofSeen() const { return eofSeen_.load(); }
-  std::shared_ptr<qobuz::QobuzQueueTrack> getCurrentTrack() const { return current_track_buffering; }
+  std::shared_ptr<qobuz::QobuzQueueTrack> getCurrentTrack() const {
+    return current_track_buffering;
+  }
   void setRepeatOne(bool v) { repeatOne_.store(v); }
   void stopTask() {
     stopTrack();
@@ -70,38 +72,43 @@ public:
     }
   }
   size_t currentTrackValueMs() const {
-    if (!current_track_playing) return 0;
-    if (player_state.currentPosition.has_timestamp && player_state.currentPosition.timestamp != 0) {
-      return player_state.currentPosition.value + (timesync::now_ms() - player_state.currentPosition.timestamp);
+    if (!current_track_playing)
+      return 0;
+    if (player_state.currentPosition.has_timestamp &&
+        player_state.currentPosition.timestamp != 0) {
+      return player_state.currentPosition.value +
+             (timesync::now_ms() - player_state.currentPosition.timestamp);
     }
     return 0;
   }
 
   void setTracks() {
-    current_track_playing = queue_->consumeTrack(nullptr, player_state.nextQueueItemId);
+    current_track_playing =
+        queue_->consumeTrack(nullptr, player_state.nextQueueItemId);
   }
 
   void sendPlayerState();
-  std::string user_id_{ "" };
-  qconnect_QueueRendererState player_state = qconnect_QueueRendererState_init_default;
+  std::string user_id_{""};
+  qconnect_QueueRendererState player_state =
+      qconnect_QueueRendererState_init_default;
   OnUiMessage onUiMessage_;
 
-private:
-  std::vector<uint8_t> header_;    // optional cached header
-  std::shared_ptr<qobuz::QobuzQueue> queue_{ nullptr };
+ private:
+  std::vector<uint8_t> header_;  // optional cached header
+  std::shared_ptr<qobuz::QobuzQueue> queue_{nullptr};
   std::shared_ptr<qobuz::QobuzQueueTrack> current_track_buffering = nullptr;
   std::shared_ptr<qobuz::QobuzQueueTrack> current_track_playing = nullptr;
 
   std::unique_ptr<Heartbeat> hb_;
 
-  size_t totalSize_{ 0 };        // playable size = Content-Length - baseOffset_
-  size_t baseOffset_{ 0 };        // byte position of 'fLaC' in the CDN file
+  size_t totalSize_{0};   // playable size = Content-Length - baseOffset_
+  size_t baseOffset_{0};  // byte position of 'fLaC' in the CDN file
   size_t startedPlayingAt = 0;
 
-  std::atomic<bool> eofMode_{ true };
-  std::atomic<bool> eofSeen_{ false };
-  std::atomic<bool> wantRestart_{ false };
-  std::atomic<bool> repeatOne_{ false };
+  std::atomic<bool> eofMode_{true};
+  std::atomic<bool> eofSeen_{false};
+  std::atomic<bool> wantRestart_{false};
+  std::atomic<bool> repeatOne_{false};
   std::mutex isRunningMutex_;
   /**
    * @brief Get stream information from a URL (HTTP(S) or HTTPS).
@@ -116,7 +123,8 @@ private:
    * If the format is FLAC, it will probe the stream for FLAC metadata and store reduced metadata in the provided buffer.
    * If the format is not supported, it will not probe the stream and return false.
    */
-  bool getStreamInfo(std::string url, size_t& length, size_t& offset, qobuz::AudioFormat format, uint8_t* buffer);
+  bool getStreamInfo(std::string url, size_t& length, size_t& offset,
+                     qobuz::AudioFormat format, uint8_t* buffer);
   /**
    * @brief Probes a SocketStream for FLAC metadata.
    * @param s SocketStream to read from
@@ -130,9 +138,11 @@ private:
    * and parses the FLAC metadata from there.
    * A reduced metadata buffer (42 bytes) is provided in dst.
    */
-  bool probeFlac(bell::HTTPClient::Response* s, size_t n, uint8_t* dst, size_t& offset);
+  bool probeFlac(bell::HTTPClient::Response* s, size_t n, uint8_t* dst,
+                 size_t& offset);
 
-  bool probeHttpHeaders(bell::HTTPClient::Headers& headers, size_t& totalLength, qobuz::AudioFormat fmt);
+  bool probeHttpHeaders(bell::HTTPClient::Headers& headers, size_t& totalLength,
+                        qobuz::AudioFormat fmt);
 
   OnWsMessage on_ws_msg_;
   OnQobuzGet on_qobuz_get_;

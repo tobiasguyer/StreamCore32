@@ -2,16 +2,16 @@
 
 #include <algorithm>  // for copy
 #include <climits>    // for CHAR_BIT
-#include <random>     // for default_random_engine, independent_bits_en...
 #include <cstring>    // for memcpy, strlen
+#include <random>     // for default_random_engine, independent_bits_en...
 #include "NanoPBExtensions.h"  // for bell::nanopb::encode...
-#include "NanoPBHelper.h"  // for pbPutString, pbEncode, pbDecode
-#include "pb.h"            // for pb_byte_t
-#include "pb_decode.h"     // for pb_release
+#include "NanoPBHelper.h"      // for pbPutString, pbEncode, pbDecode
+#include "pb.h"                // for pb_byte_t
+#include "pb_decode.h"         // for pb_release
 
 using namespace spotify;
 using random_bytes_engine =
-std::independent_bits_engine<std::default_random_engine, CHAR_BIT, uint8_t>;
+    std::independent_bits_engine<std::default_random_engine, CHAR_BIT, uint8_t>;
 
 AuthChallenges::AuthChallenges() {
   this->crypto = std::make_unique<Crypto>();
@@ -30,15 +30,15 @@ AuthChallenges::~AuthChallenges() {
 }
 
 std::vector<uint8_t> AuthChallenges::prepareAuthPacket(
-  std::vector<uint8_t>& authData, int authType, const std::string& deviceId,
-  const std::string& username) {
+    std::vector<uint8_t>& authData, int authType, const std::string& deviceId,
+    const std::string& username) {
   // prepare authentication request proto
   pb_release(ClientResponseEncrypted_fields, &authRequest);
   authRequest = ClientResponseEncrypted_init_default;
   authRequest.login_credentials.username = strdup(username.c_str());
   auto n = authData.size();
   authRequest.login_credentials.auth_data.funcs.encode =
-    &bell::nanopb::encodeVector;
+      &bell::nanopb::encodeVector;
   authRequest.login_credentials.auth_data.arg = &authData;
 
   authRequest.system_info.system_information_string = strdup("sc32-player");
@@ -55,7 +55,7 @@ std::vector<uint8_t> AuthChallenges::prepareAuthPacket(
 }
 
 std::vector<uint8_t> AuthChallenges::solveApHello(
-  std::vector<uint8_t>& helloPacket, std::vector<uint8_t>& data) {
+    std::vector<uint8_t>& helloPacket, std::vector<uint8_t>& data) {
   // Decode the response
   auto skipSize = std::vector<uint8_t>(data.begin() + 4, data.end());
 
@@ -63,8 +63,8 @@ std::vector<uint8_t> AuthChallenges::solveApHello(
   pbDecode(apResponse, APResponseMessage_fields, skipSize);
 
   auto diffieKey = std::vector<uint8_t>(
-    apResponse.challenge.login_crypto_challenge.diffie_hellman.gs,
-    apResponse.challenge.login_crypto_challenge.diffie_hellman.gs + 96);
+      apResponse.challenge.login_crypto_challenge.diffie_hellman.gs,
+      apResponse.challenge.login_crypto_challenge.diffie_hellman.gs + 96);
 
   // Compute the diffie hellman shared key based on the response
   auto sharedKey = this->crypto->dhCalculateShared(diffieKey);
@@ -84,20 +84,20 @@ std::vector<uint8_t> AuthChallenges::solveApHello(
   }
 
   auto lastVec =
-    std::vector<uint8_t>(resultData.begin(), resultData.begin() + 0x14);
+      std::vector<uint8_t>(resultData.begin(), resultData.begin() + 0x14);
 
   // Digest generated!
   auto digest = crypto->sha1HMAC(lastVec, data);
   clientResPlaintext.login_crypto_response.has_diffie_hellman = true;
 
   std::copy(digest.begin(), digest.end(),
-    clientResPlaintext.login_crypto_response.diffie_hellman.hmac);
+            clientResPlaintext.login_crypto_response.diffie_hellman.hmac);
 
   // Get send and receive keys
   this->shanSendKey = std::vector<uint8_t>(resultData.begin() + 0x14,
-    resultData.begin() + 0x34);
+                                           resultData.begin() + 0x34);
   this->shanRecvKey = std::vector<uint8_t>(resultData.begin() + 0x34,
-    resultData.begin() + 0x54);
+                                           resultData.begin() + 0x54);
 
   return pbEncode(ClientResponsePlaintext_fields, &clientResPlaintext);
 }
@@ -108,7 +108,7 @@ std::vector<uint8_t> AuthChallenges::prepareClientHello() {
 
   // Copy the public key into diffiehellman hello packet
   std::copy(this->crypto->publicKey.begin(), this->crypto->publicKey.end(),
-    clientHello.login_crypto_hello.diffie_hellman.gc);
+            clientHello.login_crypto_hello.diffie_hellman.gc);
 
   clientHello.login_crypto_hello.diffie_hellman.server_keys_known = 1;
   clientHello.build_info.product = Product_PRODUCT_CLIENT;

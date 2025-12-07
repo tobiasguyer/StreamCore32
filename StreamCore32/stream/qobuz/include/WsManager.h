@@ -1,35 +1,35 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
-#include <map>
 
 #include "BellTask.h"
 #include "WebSocketClient.h"
 
+#include "NanoPBHelper.h"
 #include "protobuf/qconnect_envelope.pb.h"
 #include "protobuf/qconnect_payload.pb.h"
-#include "NanoPBHelper.h"
 
 #include "Logger.h"
 
 struct WSToken {
   std::string jwt;
-  uint64_t    exp_s = 0;        // UTC seconds
+  uint64_t exp_s = 0;  // UTC seconds
   std::string endpoint;
 };
 
-class WsManager : public bell::Task
-{
-public:
-
+class WsManager : public bell::Task {
+ public:
   using OnOpen = std::function<void()>;
 
   using Callback = std::function<void(const std::string& payload)>;
-  using BytesCallback = std::function<void(const std::vector<uint8_t>& payload)>;
+  using BytesCallback =
+      std::function<void(const std::vector<uint8_t>& payload)>;
   using TokenRefresher = std::function<WSToken()>;
 
-  WsManager(TokenRefresher refresh_token) : bell::Task("qobuz_ws_manager", 4096 * 3, 1, 1) {
+  WsManager(TokenRefresher refresh_token)
+      : bell::Task("qobuz_ws_manager", 4096 * 3, 1, 1) {
     this->refresh_token_ = std::move(refresh_token);
     if (refresh_token_) {
       auto t = refresh_token_();
@@ -39,43 +39,46 @@ public:
     }
     client_ = std::make_unique<WebSocketClient>();
     client_->onOpen([this]() {
-
       this->auth();
       this->tx_lock_.store(false);
-      std::function<void(uint8_t, const std::vector<uint8_t>, const std::vector<std::vector<uint8_t>>)> send_auth =
-        [this](uint8_t msg_type, const std::vector<uint8_t>& payload, const std::vector<std::vector<uint8_t>>& dests) {
-        uint32_t id = ++next_id_;
-        uint64_t ts = timesync::now_ms();
-        qconnect_Payload env = qconnect_Payload_init_zero;
-        env.has_msgId = true;
-        env.msgId = id;
-        env.has_msgDate = true;
-        env.msgDate = ts;
-        env.has_proto = true;
-        env.proto = qconnect_QCloudProto_QP_QCONNECT;
-        if (dests.size()) {
-          env.dests = (pb_bytes_array_t**)calloc(dests.size(), sizeof(pb_bytes_array_t*));
-          env.dests_count = dests.size();
-          for (int i = 0; i < dests.size(); i++) {
-            env.dests[i] = vectorToPbArray(dests[i]);
-          }
-        }
-        if (payload.size()) {
-          env.payload = vectorToPbArray(payload);
-        }
-        auto data = pbEncode(qconnect_Payload_fields, &env);
-        this->send(msg_type, data);
-        pb_release(qconnect_Payload_fields, &env);
-        last_tx_ms_ = ts;
-        tx_lock_.store(false);
-        };
+      std::function<void(uint8_t, const std::vector<uint8_t>,
+                         const std::vector<std::vector<uint8_t>>)>
+          send_auth = [this](uint8_t msg_type,
+                             const std::vector<uint8_t>& payload,
+                             const std::vector<std::vector<uint8_t>>& dests) {
+            uint32_t id = ++next_id_;
+            uint64_t ts = timesync::now_ms();
+            qconnect_Payload env = qconnect_Payload_init_zero;
+            env.has_msgId = true;
+            env.msgId = id;
+            env.has_msgDate = true;
+            env.msgDate = ts;
+            env.has_proto = true;
+            env.proto = qconnect_QCloudProto_QP_QCONNECT;
+            if (dests.size()) {
+              env.dests = (pb_bytes_array_t**)calloc(dests.size(),
+                                                     sizeof(pb_bytes_array_t*));
+              env.dests_count = dests.size();
+              for (int i = 0; i < dests.size(); i++) {
+                env.dests[i] = vectorToPbArray(dests[i]);
+              }
+            }
+            if (payload.size()) {
+              env.payload = vectorToPbArray(payload);
+            }
+            auto data = pbEncode(qconnect_Payload_fields, &env);
+            this->send(msg_type, data);
+            pb_release(qconnect_Payload_fields, &env);
+            last_tx_ms_ = ts;
+            tx_lock_.store(false);
+          };
       send_auth(qconnect_QCloudMessageType_SUBSCRIBE, {}, {});
       this->isConnected.store(true);
       this->on_auth_();
-      });
+    });
     client_->onClose([&](int code, const std::string& reason) {
       SC32_LOG(error, "CLOSED %d %s", code, reason.c_str());
-      });
+    });
   };
   ~WsManager() {
     stop();
@@ -88,37 +91,39 @@ public:
   void setToken(const WSToken& t) {
     token_ = t.jwt;
     token_exp_s_ = t.exp_s;
-    if (!t.endpoint.empty()) endpoint_ = t.endpoint;
+    if (!t.endpoint.empty())
+      endpoint_ = t.endpoint;
   }
   void onAuth(OnOpen f) { on_auth_ = std::move(f); }
   void onPayload(BytesCallback f) { on_payload_ = std::move(f); }
   void auth() {
-    if (token_.empty()) return;
+    if (token_.empty())
+      return;
     uint64_t ts = timesync::now_ms();
-    qconnect_Authenticate auth = {
-      1, ++next_id_,
-      1, ts,
-      strdup(token_.c_str())
-    };
-    auto data = client_->pack(qconnect_QCloudMessageType_AUTHENTICATE, pbEncode(qconnect_Authenticate_fields, &auth));
+    qconnect_Authenticate auth = {1, ++next_id_, 1, ts, strdup(token_.c_str())};
+    auto data = client_->pack(qconnect_QCloudMessageType_AUTHENTICATE,
+                              pbEncode(qconnect_Authenticate_fields, &auth));
     client_->send(0x2, data);
     pb_release(qconnect_Authenticate_fields, &auth);
   }
-  void onConnected() {
-    tx_lock_.store(false);
-  }
+  void onConnected() { tx_lock_.store(false); }
 
   void send(uint8_t msg_type, const std::vector<uint8_t>& payload) {
-    while (tx_lock_.load()) BELL_SLEEP_MS(100);
+    while (tx_lock_.load())
+      BELL_SLEEP_MS(100);
     tx_lock_.store(true);
     auto data = client_->pack(msg_type, payload);
     client_->send(0x2, data);
     tx_lock_.store(false);
   }
-  void send(uint8_t msg_type, const std::vector<uint8_t>& payload, const std::vector<std::vector<uint8_t>>& dests, uint64_t ts = 0, Callback cb = nullptr) {
-    if (!this->isConnected.load()) return;
+  void send(uint8_t msg_type, const std::vector<uint8_t>& payload,
+            const std::vector<std::vector<uint8_t>>& dests, uint64_t ts = 0,
+            Callback cb = nullptr) {
+    if (!this->isConnected.load())
+      return;
     uint32_t id = ++next_id_;
-    if (!ts) ts = timesync::now_ms();
+    if (!ts)
+      ts = timesync::now_ms();
     if (cb) {
       std::scoped_lock lock(cb_mtx_);
       cbs_[id] = std::move(cb);
@@ -131,7 +136,8 @@ public:
     env.has_proto = true;
     env.proto = qconnect_QCloudProto_QP_QCONNECT;
     if (dests.size()) {
-      env.dests = (pb_bytes_array_t**)calloc(dests.size(), sizeof(pb_bytes_array_t*));
+      env.dests =
+          (pb_bytes_array_t**)calloc(dests.size(), sizeof(pb_bytes_array_t*));
       env.dests_count = dests.size();
       for (int i = 0; i < dests.size(); i++) {
         env.dests[i] = vectorToPbArray(dests[i]);
@@ -149,19 +155,19 @@ public:
   void runTask() override {
     std::scoped_lock lock(isRunningMutex_);
     isRunning_.store(true);
-    const uint64_t REFRESH_WINDOW_MS = 60 * 1000; // refresh 60s before expiry
+    const uint64_t REFRESH_WINDOW_MS = 60 * 1000;  // refresh 60s before expiry
 
     while (isRunning_.load()) {
-      if (!client_->connect(endpoint_, "https://play.qobuz.com", { "qws" })) {
+      if (!client_->connect(endpoint_, "https://play.qobuz.com", {"qws"})) {
         SC32_LOG(error, "connect failed; retrying in 2s");
         BELL_SLEEP_MS(2000);
         continue;
       }
 
       // OPTIONAL: tune keepalive
-      client_->setKeepalive(/*pingEveryMs*/10000, /*pongTimeoutMs*/30000);
+      client_->setKeepalive(/*pingEveryMs*/ 10000, /*pongTimeoutMs*/ 30000);
 
-      client_->startTask(); // starts WS I/O loop
+      client_->startTask();  // starts WS I/O loop
       while (isRunning_.load() && client_->isOpen()) {
         auto data = client_->handleFrame();
         if (data.size()) {
@@ -173,29 +179,28 @@ public:
               if (it != cbs_.end()) {
                 //it->second(r.second);
                 cbs_.erase(it);
-              }
-              else if (r.first == 6) {
+              } else if (r.first == 6) {
                 on_payload_(r.second);
-              }
-              else {
+              } else {
                 SC32_LOG(error, "no callback for command %d", r.first);
               }
             }
           }
-
         }
         BELL_SLEEP_MS(100);
         if (token_exp_s_) {
-          uint64_t now = timesync::now_ms(); // UTC ms
+          uint64_t now = timesync::now_ms();  // UTC ms
           if (now - last_tx_ms_ > REFRESH_WINDOW_MS &&
-            now + REFRESH_WINDOW_MS >= token_exp_s_ * 1000ULL) {
+              now + REFRESH_WINDOW_MS >= token_exp_s_ * 1000ULL) {
             if (refresh_token_) {
-              while (tx_lock_.load()) BELL_YIELD();
+              while (tx_lock_.load())
+                BELL_YIELD();
               tx_lock_.store(true);
               auto t = refresh_token_();
               if (!t.jwt.empty()) {
-                setToken(t);           // update token_/endpoint_/token_exp_s_
-                if (client_) client_->close(); // force reconnect using fresh token
+                setToken(t);  // update token_/endpoint_/token_exp_s_
+                if (client_)
+                  client_->close();  // force reconnect using fresh token
               }
             }
           }
@@ -206,7 +211,7 @@ public:
     }
   }
 
-private:
+ private:
   OnOpen on_auth_;
   BytesCallback on_payload_;
 

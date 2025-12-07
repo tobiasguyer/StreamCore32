@@ -1,18 +1,23 @@
 #pragma once
-#include <string>
-#include <map>
-#include <vector>
-#include <optional>
-#include <memory>
-#include <BellTask.h>
 #include <BellLogger.h>
+#include <BellTask.h>
 #include <WrappedSemaphore.h>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 
 class QobuzConfig : public bell::Task {
-public:
+ public:
   // What we try to extract
-  struct AppKey { std::string id, secret; };
-  struct Seed { std::string tz_cap; std::string seed; };
+  struct AppKey {
+    std::string id, secret;
+  };
+  struct Seed {
+    std::string tz_cap;
+    std::string seed;
+  };
 
   struct ClientAppSecrets {
     std::string id;
@@ -23,9 +28,7 @@ public:
     // For anything extra the site exposes
     std::map<std::string, std::string> extras;
 
-    bool empty() const {
-      return !secrets.size() || !api_keys.size();
-    }
+    bool empty() const { return !secrets.size() || !api_keys.size(); }
   };
 
   // Tuning knobs
@@ -41,17 +44,17 @@ public:
     std::vector<std::pair<std::string, std::string>> extra_headers;
   };
 
-  QobuzConfig(ClientAppSecrets* secrets, const SecretScrapeOptions* opts = nullptr)
-    : bell::Task("QobuzConfig", 48 * 1024, 2, 1) {
+  QobuzConfig(ClientAppSecrets* secrets,
+              const SecretScrapeOptions* opts = nullptr)
+      : bell::Task("QobuzConfig", 48 * 1024, 2, 1) {
     loadedSemaphore = std::make_shared<bell::WrappedSemaphore>(1, 0);
     secrets_ = secrets;
-    if (opts) opts_ = *opts;
+    if (opts)
+      opts_ = *opts;
     startTask();
   }
 
-  ~QobuzConfig() {
-    loadedSemaphore->give();
-  }
+  ~QobuzConfig() { loadedSemaphore->give(); }
   void runTask() override {
     *secrets_ = FetchClientAppSecrets();
     loadedSemaphore->give();
@@ -67,7 +70,7 @@ public:
 
   std::shared_ptr<bell::WrappedSemaphore> loadedSemaphore;
   // Replace your findQuotedString(...) with this version (no <regex>):
-private:
+ private:
   ClientAppSecrets* secrets_;
   SecretScrapeOptions opts_;
 };

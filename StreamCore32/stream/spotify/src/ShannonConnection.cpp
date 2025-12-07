@@ -21,8 +21,8 @@ ShannonConnection::~ShannonConnection() {
 }
 
 void ShannonConnection::wrapConnection(
-  std::shared_ptr<spotify::PlainConnection> conn, std::vector<uint8_t>& sendKey,
-  std::vector<uint8_t>& recvKey) {
+    std::shared_ptr<spotify::PlainConnection> conn,
+    std::vector<uint8_t>& sendKey, std::vector<uint8_t>& recvKey) {
   this->conn = conn;
 
   this->sendCipher = std::make_unique<Shannon>();
@@ -94,11 +94,11 @@ spotify::Packet ShannonConnection::recvPacket() {
     cmd = data[0];
   }
   // data[0] == cmd
-  return Packet{ cmd, packetData };
+  return Packet{cmd, packetData};
 }
 
 std::vector<uint8_t> ShannonConnection::cipherPacket(
-  uint8_t cmd, std::vector<uint8_t>& data) {
+    uint8_t cmd, std::vector<uint8_t>& data) {
   // Generate packet structure, [Command] [Size] [Raw data]
   auto sizeRaw = pack<uint16_t>(htons(uint16_t(data.size())));
 

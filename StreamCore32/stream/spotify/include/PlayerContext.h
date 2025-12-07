@@ -19,8 +19,10 @@
 #define MAX_TRACKS 100
 namespace spotify {
 struct PlayerContext {
-  PlayerContext(std::shared_ptr<spotify::Context> ctx, player_proto_connect_PlayerState* playerState,
-                std::vector<player_proto_connect_ProvidedTrack>* tracks, uint8_t* index) {
+  PlayerContext(std::shared_ptr<spotify::Context> ctx,
+                player_proto_connect_PlayerState* playerState,
+                std::vector<player_proto_connect_ProvidedTrack>* tracks,
+                uint8_t* index) {
     this->ctx = ctx;
     this->playerState = playerState;
     this->tracks = tracks;
@@ -43,9 +45,9 @@ struct PlayerContext {
       nlohmann::json::value_type& json_tracks, const char* provider,
       uint32_t offset = 0, uint8_t page = 0, bool shuffle = false,
       bool preloadedTrack = false);
-  void createIndexBasedOnTracklist(std::vector<player_proto_connect_ProvidedTrack>* tracks,
-                                   nlohmann::json::value_type& json_tracks,
-                                   bool shuffle, uint8_t page);
+  void createIndexBasedOnTracklist(
+      std::vector<player_proto_connect_ProvidedTrack>* tracks,
+      nlohmann::json::value_type& json_tracks, bool shuffle, uint8_t page);
   //void jsonToPlayerStateContext(PlayerState* playerState, std::vector<ProvidedTrack>* tracks, uint8_t* index, std::vector<std::pair<std::string,std::string>> metadata_map,nlohmann::json::object_t context);
   static char* createStringReferenceIfFound(
       nlohmann::json::value_type& jsonObject, const char* key);

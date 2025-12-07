@@ -43,10 +43,10 @@ PlainConnection::~PlainConnection() {
 };
 
 void PlainConnection::connect(const std::string& apAddress) {
-  struct addrinfo h, * airoot, * ai;
+  struct addrinfo h, *airoot, *ai;
   std::string hostname = apAddress.substr(0, apAddress.find(":"));
   std::string portStr =
-    apAddress.substr(apAddress.find(":") + 1, apAddress.size());
+      apAddress.substr(apAddress.find(":") + 1, apAddress.size());
   memset(&h, 0, sizeof(h));
   h.ai_family = AF_INET;
   h.ai_socktype = SOCK_STREAM;
@@ -67,7 +67,7 @@ void PlainConnection::connect(const std::string& apAddress) {
       continue;
 
     if (::connect(this->apSock, (struct sockaddr*)ai->ai_addr,
-      ai->ai_addrlen) != -1) {
+                  ai->ai_addrlen) != -1) {
 #ifdef _WIN32
       uint32_t tv = 3000;
 #else
@@ -76,16 +76,16 @@ void PlainConnection::connect(const std::string& apAddress) {
       tv.tv_usec = 0;
 #endif
       setsockopt(this->apSock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv,
-        sizeof tv);
+                 sizeof tv);
       setsockopt(this->apSock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv,
-        sizeof tv);
+                 sizeof tv);
 
       int flag = 1;
       setsockopt(this->apSock, /* socket affected */
-        IPPROTO_TCP,  /* set option at TCP level */
-        TCP_NODELAY,  /* name of option */
-        (char*)&flag, /* the cast is historical cruft */
-        sizeof(int)); /* length of option value */
+                 IPPROTO_TCP,  /* set option at TCP level */
+                 TCP_NODELAY,  /* name of option */
+                 (char*)&flag, /* the cast is historical cruft */
+                 sizeof(int)); /* length of option value */
       break;
     }
 
@@ -117,7 +117,7 @@ std::vector<uint8_t> PlainConnection::recvPacket() {
 }
 
 std::vector<uint8_t> PlainConnection::sendPrefixPacket(
-  const std::vector<uint8_t>& prefix, const std::vector<uint8_t>& data) {
+    const std::vector<uint8_t>& prefix, const std::vector<uint8_t>& data) {
   // Calculate full packet length
   uint32_t actualSize = prefix.size() + data.size() + sizeof(uint32_t);
 
@@ -135,13 +135,18 @@ size_t PlainConnection::writeBlock(const std::vector<uint8_t>& data) {
   size_t idx = 0;
 
   while (idx < data.size()) {
-    const size_t toSend = data.size() - idx; // let the OS split as needed
+    const size_t toSend = data.size() - idx;  // let the OS split as needed
 #ifdef MSG_NOSIGNAL
-    ssize_t n = ::send(apSock, reinterpret_cast<const char*>(&data[idx]), toSend, MSG_NOSIGNAL);
+    ssize_t n = ::send(apSock, reinterpret_cast<const char*>(&data[idx]),
+                       toSend, MSG_NOSIGNAL);
 #else
-    ssize_t n = ::send(apSock, reinterpret_cast<const char*>(&data[idx]), toSend, 0);
+    ssize_t n =
+        ::send(apSock, reinterpret_cast<const char*>(&data[idx]), toSend, 0);
 #endif
-    if (n > 0) { idx += static_cast<size_t>(n); continue; }
+    if (n > 0) {
+      idx += static_cast<size_t>(n);
+      continue;
+    }
 
     if (n == 0) {
       SC32_LOG(error, "write: send returned 0 (peer?)");
@@ -151,16 +156,17 @@ size_t PlainConnection::writeBlock(const std::vector<uint8_t>& data) {
     const int e = getErrno();
     if (e == EAGAIN
 #ifdef EWOULDBLOCK
-      || e == EWOULDBLOCK
+        || e == EWOULDBLOCK
 #endif
-      || e == ETIMEDOUT) {
+        || e == ETIMEDOUT) {
       if (timeoutHandler()) {
         SC32_LOG(error, "write: timeoutHandler() says reconnect");
         throw std::runtime_error("Reconnection required");
       }
       continue;
     }
-    if (e == EINTR) continue;
+    if (e == EINTR)
+      continue;
     if (e == EPIPE || e == ECONNRESET) {
       SC32_LOG(error, "write: connection lost (errno=%d %s)", e, strerror(e));
       throw std::runtime_error("Reconnection required");
@@ -172,12 +178,12 @@ size_t PlainConnection::writeBlock(const std::vector<uint8_t>& data) {
   return data.size();
 }
 
-
 void PlainConnection::readBlock(uint8_t* dst, size_t size) {
   size_t idx = 0;
 
   while (idx < size) {
-    ssize_t n = ::recv(apSock, reinterpret_cast<char*>(dst + idx), size - idx, 0);
+    ssize_t n =
+        ::recv(apSock, reinterpret_cast<char*>(dst + idx), size - idx, 0);
     if (n > 0) {
       idx += static_cast<size_t>(n);
       continue;
@@ -191,24 +197,24 @@ void PlainConnection::readBlock(uint8_t* dst, size_t size) {
     const int e = getErrno();
     if (e == EAGAIN
 #ifdef EWOULDBLOCK
-      || e == EWOULDBLOCK
+        || e == EWOULDBLOCK
 #endif
-      || e == ETIMEDOUT) {
+        || e == ETIMEDOUT) {
       // Soft timeout: ask the higher-level timeoutHandler
       if (timeoutHandler()) {
         SC32_LOG(error, "read: timeoutHandler() says reconnect");
         throw std::runtime_error("Reconnection required");
       }
-      continue; // try again
+      continue;  // try again
     }
 
-    if (e == EINTR) continue;
+    if (e == EINTR)
+      continue;
 
     SC32_LOG(error, "read: fatal errno=%d (%s)", e, strerror(e));
     throw std::runtime_error("Error in read");
   }
 }
-
 
 void PlainConnection::close() {
   if (this->apSock < 0)

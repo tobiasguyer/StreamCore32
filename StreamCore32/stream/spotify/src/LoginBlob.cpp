@@ -34,7 +34,7 @@ std::string sha1_digest(const std::vector<uint8_t>& message) {
   std::ostringstream oss;
   for (const auto& byte : digest) {
     oss << std::hex << std::setw(2) << std::setfill('0')
-      << static_cast<int>(byte);
+        << static_cast<int>(byte);
   }
 
   return oss.str();  // Return the hex string
@@ -51,14 +51,16 @@ LoginBlob::LoginBlob(std::string name) {
   char hash[32];
   sprintf(hash, "%016zu", std::hash<std::string>{}(name));
   // base is 142137fd329622137a14901634264e6f332e2411
-  this->deviceId = createDeviceId(); //sha1_digest(std::vector<uint8_t>(hash, hash + 16));
+  this->deviceId =
+      createDeviceId();  //sha1_digest(std::vector<uint8_t>(hash, hash + 16));
   this->crypto = std::make_unique<Crypto>();
   this->name = name;
 
   this->crypto->dhInit();
 }
-LoginBlob::LoginBlob(std::string name, std::string username, std::vector<uint8_t> authData) {
-  this->deviceId = createDeviceId(); //sha1_digest(mac);
+LoginBlob::LoginBlob(std::string name, std::string username,
+                     std::vector<uint8_t> authData) {
+  this->deviceId = createDeviceId();  //sha1_digest(mac);
   this->crypto = std::make_unique<Crypto>();
   this->name = name;
 
@@ -70,7 +72,7 @@ LoginBlob::LoginBlob(std::string name, std::string username, std::vector<uint8_t
 }
 
 std::vector<uint8_t> LoginBlob::decodeBlob(
-  const std::vector<uint8_t>& blob, const std::vector<uint8_t>& sharedKey) {
+    const std::vector<uint8_t>& blob, const std::vector<uint8_t>& sharedKey) {
   // 0:16 - iv; 17:-20 - blob; -20:0 - checksum
   auto iv = std::vector<uint8_t>(blob.begin(), blob.begin() + 16);
   auto encrypted = std::vector<uint8_t>(blob.begin() + 16, blob.end() - 20);
@@ -85,24 +87,24 @@ std::vector<uint8_t> LoginBlob::decodeBlob(
 
   auto checksumMessage = std::string("checksum");
   auto checksumKey = crypto->sha1HMAC(
-    baseKey,
-    std::vector<uint8_t>(checksumMessage.begin(), checksumMessage.end()));
+      baseKey,
+      std::vector<uint8_t>(checksumMessage.begin(), checksumMessage.end()));
 
   auto encryptionMessage = std::string("encryption");
   auto encryptionKey = crypto->sha1HMAC(
-    baseKey,
-    std::vector<uint8_t>(encryptionMessage.begin(), encryptionMessage.end()));
+      baseKey,
+      std::vector<uint8_t>(encryptionMessage.begin(), encryptionMessage.end()));
 
   auto mac = crypto->sha1HMAC(checksumKey, encrypted);
 
   // Check checksum
   if (mac != checksum) {
-    SC32_LOG(error, "Mac doesn't match! Mac: %s, Checksum: %s",
-      mac.data(), checksum.data());
+    SC32_LOG(error, "Mac doesn't match! Mac: %s, Checksum: %s", mac.data(),
+             checksum.data());
   }
 
   encryptionKey =
-    std::vector<uint8_t>(encryptionKey.begin(), encryptionKey.begin() + 16);
+      std::vector<uint8_t>(encryptionKey.begin(), encryptionKey.begin() + 16);
   crypto->aesCTRXcrypt(encryptionKey, iv, encrypted.data(), encrypted.size());
 
   return encrypted;
@@ -122,8 +124,8 @@ uint32_t LoginBlob::readBlobInt(const std::vector<uint8_t>& data) {
 }
 
 std::vector<uint8_t> LoginBlob::decodeBlobSecondary(
-  const std::vector<uint8_t>& blob, const std::string& username,
-  const std::string& deviceId) {
+    const std::vector<uint8_t>& blob, const std::string& username,
+    const std::string& deviceId) {
   auto encryptedString = std::string(blob.begin(), blob.end());
   auto blobData = crypto->base64Decode(encryptedString);
 
@@ -131,11 +133,11 @@ std::vector<uint8_t> LoginBlob::decodeBlobSecondary(
   crypto->sha1Update(std::vector<uint8_t>(deviceId.begin(), deviceId.end()));
   auto secret = crypto->sha1FinalBytes();
   auto pkBaseKey = crypto->pbkdf2HmacSha1(
-    secret, std::vector<uint8_t>(username.begin(), username.end()), 256, 20);
+      secret, std::vector<uint8_t>(username.begin(), username.end()), 256, 20);
 
   crypto->sha1Init();
   crypto->sha1Update(pkBaseKey);
-  auto key = std::vector<uint8_t>({ 0x00, 0x00, 0x00, 0x14 });  // len of base key
+  auto key = std::vector<uint8_t>({0x00, 0x00, 0x00, 0x14});  // len of base key
   auto baseKeyHashed = crypto->sha1FinalBytes();
   key.insert(key.begin(), baseKeyHashed.begin(), baseKeyHashed.end());
 
@@ -151,9 +153,9 @@ std::vector<uint8_t> LoginBlob::decodeBlobSecondary(
 }
 
 void LoginBlob::loadZeroconf(const std::vector<uint8_t>& blob,
-  const std::vector<uint8_t>& sharedKey,
-  const std::string& deviceId,
-  const std::string& username) {
+                             const std::vector<uint8_t>& sharedKey,
+                             const std::string& deviceId,
+                             const std::string& username) {
 
   auto partDecoded = this->decodeBlob(blob, sharedKey);
   auto loginData = this->decodeBlobSecondary(partDecoded, username, deviceId);
@@ -167,16 +169,16 @@ void LoginBlob::loadZeroconf(const std::vector<uint8_t>& blob,
   auto authSize = readBlobInt(loginData);
   this->username = username;
   this->authData =
-    std::vector<uint8_t>(loginData.begin() + blobSkipPosition,
-      loginData.begin() + blobSkipPosition + authSize);
+      std::vector<uint8_t>(loginData.begin() + blobSkipPosition,
+                           loginData.begin() + blobSkipPosition + authSize);
 }
 
 void LoginBlob::loadUserPass(const std::string& username,
-  const std::string& password) {
+                             const std::string& password) {
   this->username = username;
   this->authData = std::vector<uint8_t>(password.begin(), password.end());
   this->authType =
-    static_cast<uint32_t>(AuthenticationType_AUTHENTICATION_USER_PASS);
+      static_cast<uint32_t>(AuthenticationType_AUTHENTICATION_USER_PASS);
 }
 
 void LoginBlob::loadJson(const std::string& json) {
@@ -185,7 +187,7 @@ void LoginBlob::loadJson(const std::string& json) {
   this->authType = cJSON_GetObjectItem(root, "authType")->valueint;
   this->username = cJSON_GetObjectItem(root, "username")->valuestring;
   std::string authDataObject =
-    cJSON_GetObjectItem(root, "authData")->valuestring;
+      cJSON_GetObjectItem(root, "authData")->valuestring;
   this->authData = crypto->base64Decode(authDataObject);
   cJSON_Delete(root);
 #else
@@ -202,7 +204,7 @@ std::string LoginBlob::toJson() {
 #ifdef BELL_ONLY_CJSON
   cJSON* json_obj = cJSON_CreateObject();
   cJSON_AddStringToObject(json_obj, "authData",
-    crypto->base64Encode(authData).c_str());
+                          crypto->base64Encode(authData).c_str());
   cJSON_AddNumberToObject(json_obj, "authType", this->authType);
   cJSON_AddStringToObject(json_obj, "username", this->username.c_str());
 
@@ -223,7 +225,7 @@ std::string LoginBlob::toJson() {
 }
 
 void LoginBlob::loadZeroconfQuery(
-  std::map<std::string, std::string>& queryParams) {
+    std::map<std::string, std::string>& queryParams) {
   // Get all urlencoded params
   auto username = queryParams["userName"];
   auto blobString = queryParams["blob"];
@@ -260,7 +262,7 @@ std::string LoginBlob::buildZeroconfInfo() {
   cJSON_AddStringToObject(json_obj, "groupStatus", "NONE");
   cJSON_AddStringToObject(json_obj, "resolverVersion", "0");
   cJSON_AddStringToObject(json_obj, "scope",
-    "streaming,client-authorization-universal");
+                          "streaming,client-authorization-universal");
   cJSON_AddStringToObject(json_obj, "activeUser", "");
   cJSON_AddStringToObject(json_obj, "deviceID", deviceId.c_str());
   cJSON_AddStringToObject(json_obj, "remoteName", name.c_str());

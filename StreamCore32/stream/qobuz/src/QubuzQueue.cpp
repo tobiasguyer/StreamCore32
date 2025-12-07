@@ -127,25 +127,21 @@ static std::string buildSuggestionsPayload(
     std::vector<qconnect_QueueTrackRef>& tracks,
     std::deque<std::string>& expandedTrackCache, uint64_t limit = 20) {
   std::ostringstream oss;
-  oss << "{"
-      << "\"limit\":" << limit << ","
-      << "\"listened_tracks_ids\":[";
+  oss << "{" << "\"limit\":" << limit << "," << "\"listened_tracks_ids\":[";
   for (int i = tracks.size() < 100 ? 0 : tracks.size() - 100; i < tracks.size();
        i++) {
     oss << tracks[i].trackId;
     if (i < tracks.size() - 1)
       oss << ",";
   }
-  oss << "],"
-      << "\"track_to_analysed\":[";
+  oss << "]," << "\"track_to_analysed\":[";
   if (expandedTrackCache.size())
     for (int i = 0; i < expandedTrackCache.size(); i++) {
       oss << expandedTrackCache[i];
       if (i < expandedTrackCache.size() - 1)
         oss << ",";
     }
-  oss << "]"
-      << "}";
+  oss << "]" << "}";
   return oss.str();
 }
 uint8_t HDigit2Dez(const char c) {

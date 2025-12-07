@@ -598,15 +598,12 @@ static inline std::string build_start_event(
     std::shared_ptr<qobuz::QobuzQueueTrack> track, const std::string& user_id,
     int played_for_s) {
   std::ostringstream oss;
-  oss << "events=[{"
-      << "\"user_id\":" << user_id << ","
+  oss << "events=[{" << "\"user_id\":" << user_id << ","
       << "\"track_id\":" << track->id << ","
       << "\"format_id\":" << (int)track->format << ","
       << "\"date\":" << timesync::now_s_text(0) << ","
-      << "\"duration\":" << played_for_s << ","
-      << "\"online\":true,"
-      << "\"local\":false"
-      << "}]";
+      << "\"duration\":" << played_for_s << "," << "\"online\":true,"
+      << "\"local\":false" << "}]";
   return oss.str();
 }
 
@@ -631,13 +628,11 @@ static inline std::string build_end_event(
     std::shared_ptr<qobuz::QobuzQueueTrack> track, const std::string& user_id,
     int played_for_s) {
   std::ostringstream oss;
-  oss << "{\"events\":[{"
-      << "\"blob\":\"" << track->blob << "\","
+  oss << "{\"events\":[{" << "\"blob\":\"" << track->blob << "\","
       << "\"track_context_uuid\":\"" << track->contextUuid << "\","
       << "\"start_stream\":\""
       << iso8601_ms_z_from_epoch_ms(track->startedPlayingAt) << "\","
-      << "\"online\":true,"
-      << "\"local\":false,"
+      << "\"online\":true," << "\"local\":false,"
       << "\"duration\":" << played_for_s
       << "}],\"renderer_context\":{\"software_version\":\"sc32-1.0.0\"}}";
   return oss.str();

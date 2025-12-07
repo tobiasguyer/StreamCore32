@@ -6,14 +6,14 @@
 #include <type_traits>       // for remove_extent_t
 #include <vector>            // for vector
 
-#include "BellLogger.h"    // for AbstractLogger
-#include "SpotifyContext.h"  // for Context
+#include "BellLogger.h"  // for AbstractLogger
 #include "HTTPClient.h"
 #include "Logger.h"            // for SC32_LOG
 #include "MercurySession.h"    // for MercurySession, MercurySession::Res...
 #include "NanoPBExtensions.h"  // for bell::nanopb::encode...
 #include "NanoPBHelper.h"      // for pbEncode and pbDecode
 #include "Packet.h"            // for spotify
+#include "SpotifyContext.h"    // for Context
 #include "TimeProvider.h"      // for TimeProvider
 #include "Utils.h"             // for string_format
 
@@ -29,15 +29,14 @@
 using namespace spotify;
 
 static std::string CLIENT_ID =
-"65b708073fc0480ea92a077233ca87bd";  // Spotify web client's client id
+    "65b708073fc0480ea92a077233ca87bd";  // Spotify web client's client id
 
 static std::string SCOPES =
-"streaming,user-library-read,user-library-modify,user-top-read,user-read-"
-"recently-played";  // Required access scopes
+    "streaming,user-library-read,user-library-modify,user-top-read,user-read-"
+    "recently-played";  // Required access scopes
 
 AccessKeyFetcher::AccessKeyFetcher(std::shared_ptr<spotify::Context> ctx)
-  : ctx(ctx) {
-}
+    : ctx(ctx) {}
 
 bool AccessKeyFetcher::isExpired() {
   if (accessKey.empty()) {
@@ -76,14 +75,16 @@ void AccessKeyFetcher::updateAccessKey() {
   // Assign necessary request fields
   loginRequest.client_info.client_id = strdup(CLIENT_ID.c_str());  // CLIENT_ID;
 
-  loginRequest.client_info.device_id = strdup(ctx->config.deviceId.c_str());  // ctx->config.deviceId;
+  loginRequest.client_info.device_id =
+      strdup(ctx->config.deviceId.c_str());  // ctx->config.deviceId;
 
-  loginRequest.login_method.stored_credential.username = strdup(ctx->config.username.c_str());  // ctx->config.username;
+  loginRequest.login_method.stored_credential.username =
+      strdup(ctx->config.username.c_str());  // ctx->config.username;
 
   // Set login method to stored credential
   loginRequest.which_login_method = LoginRequest_stored_credential_tag;
   loginRequest.login_method.stored_credential.data.funcs.encode =
-    &bell::nanopb::encodeVector;
+      &bell::nanopb::encodeVector;
   loginRequest.login_method.stored_credential.data.arg = &ctx->config.authData;
 
   // Max retry of 3, can receive different hash cat types
@@ -93,12 +94,12 @@ void AccessKeyFetcher::updateAccessKey() {
   do {
     auto encodedRequest = pbEncode(LoginRequest_fields, &loginRequest);
     SC32_LOG(info, "Access token expired, fetching new one... %d",
-      encodedRequest.size());
+             encodedRequest.size());
 
     // Perform a login5 request, containing the encoded protobuf data
     auto response = bell::HTTPClient::post(
-      "https://login5.spotify.com/v3/login",
-      { {"Content-Type", "application/x-protobuf"} }, encodedRequest);
+        "https://login5.spotify.com/v3/login",
+        {{"Content-Type", "application/x-protobuf"}}, encodedRequest);
 
     auto responseBytes = response->bytes();
 
@@ -120,9 +121,8 @@ void AccessKeyFetcher::updateAccessKey() {
       }
 
       this->expiresAt =
-        ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
-    }
-    else {
+          ctx->timeProvider->getSyncedTimestamp() + (expiresIn * 1000);
+    } else {
       SC32_LOG(error, "Failed to fetch access token");
     }
 

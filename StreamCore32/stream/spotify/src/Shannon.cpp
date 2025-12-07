@@ -7,7 +7,7 @@ using std::size_t;
 
 static inline uint32_t rotl(uint32_t n, unsigned int c) {
   const unsigned int mask =
-    (CHAR_BIT * sizeof(n) - 1);  // assumes width is a power of 2.
+      (CHAR_BIT * sizeof(n) - 1);  // assumes width is a power of 2.
   // assert ( (c<=mask) &&"rotate by type width or more");
   c &= mask;
   return (n << c) | (n >> ((-c) & mask));
@@ -15,7 +15,7 @@ static inline uint32_t rotl(uint32_t n, unsigned int c) {
 
 static inline uint32_t rotr(uint32_t n, unsigned int c) {
   const unsigned int mask =
-    (CHAR_BIT * sizeof(n) - 1);  // assumes width is a power of 2.
+      (CHAR_BIT * sizeof(n) - 1);  // assumes width is a power of 2.
   // assert ( (c<=mask) &&"rotate by type width or more");
   c &= mask;
   return (n >> c) | (n << ((-c) & mask));
@@ -384,8 +384,7 @@ void Shannon::finish(std::vector<uint8_t>& bufVec) {
       WORD2BYTE(this->sbuf, buf);
       nbytes -= 4;
       buf += 4;
-    }
-    else {
+    } else {
       for (i = 0; i < nbytes; ++i)
         buf[i] = Byte(this->sbuf, i);
       break;

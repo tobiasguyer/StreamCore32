@@ -7,10 +7,10 @@
 
 #include "BellLogger.h"  // for AbstractLogger
 #include "BellUtils.h"   // for BELL_SLEEP_MS
-#include "SpotifyContext.h"
 #include "EventManager.h"
-#include "Logger.h"            // for SC32_LOG
-#include "Packet.h"            // for spotify
+#include "Logger.h"  // for SC32_LOG
+#include "Packet.h"  // for spotify
+#include "SpotifyContext.h"
 #include "TrackQueue.h"        // for CDNTrackStream, CDNTrackStream::TrackInfo
 #include "WrappedSemaphore.h"  // for WrappedSemaphore
 
@@ -28,15 +28,15 @@
 #endif
 
 namespace spotify {
-  struct Context;
-  class PlaybackMetrics;
+struct Context;
+class PlaybackMetrics;
 }  // namespace spotify
 
 using namespace spotify;
 
 #ifndef CONFIG_BELL_NOCODEC
 static size_t vorbisReadCb(void* ptr, size_t size, size_t nmemb,
-  TrackPlayer* self) {
+                           TrackPlayer* self) {
   return self->_vorbisRead(ptr, size, nmemb);
 }
 
@@ -55,10 +55,10 @@ static long vorbisTellCb(TrackPlayer* self) {
 #endif
 
 TrackPlayer::TrackPlayer(std::shared_ptr<spotify::Context> ctx,
-  std::shared_ptr<spotify::TrackQueue> trackQueue,
-  StateChangedCallback onStateChange,
-  bool* repeating_track)
-  : bell::Task("spotify_player", 24 * 1024, 5, 1) {
+                         std::shared_ptr<spotify::TrackQueue> trackQueue,
+                         StateChangedCallback onStateChange,
+                         bool* repeating_track)
+    : bell::Task("spotify_player", 24 * 1024, 5, 1) {
   this->ctx = ctx;
   this->setState = onStateChange;
   this->trackQueue = trackQueue;
@@ -79,7 +79,7 @@ TrackPlayer::TrackPlayer(std::shared_ptr<spotify::Context> ctx,
 
 TrackPlayer::~TrackPlayer() {
   SC32_LOG(info, "Destroying player");
-  isRunning.store(false);// = false;
+  isRunning.store(false);  // = false;
   resetState();
   std::scoped_lock lock(runningMutex);
   SC32_LOG(info, "Destroyed player");
@@ -87,17 +87,16 @@ TrackPlayer::~TrackPlayer() {
 
 void TrackPlayer::start() {
   if (!isRunning.load()) {
-    isRunning.store(true);// = true;
+    isRunning.store(true);  // = true;
     startTask();
     this->ctx->playbackMetrics->start_reason = PlaybackMetrics::reason::REMOTE;
     this->ctx->playbackMetrics->start_source = "unknown";
-  }
-  else
+  } else
     this->ctx->playbackMetrics->end_reason = PlaybackMetrics::reason::END_PLAY;
 }
 
 void TrackPlayer::stop() {
-  isRunning.store(false);// = false;
+  isRunning.store(false);  // = false;
   resetState();
   std::scoped_lock lock(runningMutex);
 }
@@ -177,7 +176,7 @@ void TrackPlayer::runTask() {
     inFuture = trackOffset > 0;
     uint8_t retries = 10;
     while (track->state != QueuedTrack::State::READY &&
-      track->state != QueuedTrack::State::FAILED && retries-- > 0) {
+           track->state != QueuedTrack::State::FAILED && retries-- > 0) {
       BELL_SLEEP_MS(100);
       SC32_LOG(error, "Track in state %i", (int)track->state);
     }
@@ -220,23 +219,23 @@ void TrackPlayer::runTask() {
 
 #ifndef CONFIG_BELL_NOCODEC
       int32_t r =
-        ov_open_callbacks(this, &vorbisFile, NULL, 0, vorbisCallbacks);
+          ov_open_callbacks(this, &vorbisFile, NULL, 0, vorbisCallbacks);
 #else
       size_t toWrite = start_offset;
       while (toWrite) {
         size_t written = dataCallback(headerBuf + (start_offset - toWrite),
-          toWrite, tracksPlayed, 0);
+                                      toWrite, tracksPlayed, 0);
         if (written == 0) {
           BELL_SLEEP_MS(10);
-        }
-        else BELL_YIELD();
+        } else
+          BELL_YIELD();
         toWrite -= written;
       }
 
       track->written_bytes += start_offset;
       float duration_lambda = 1.0 *
-        (currentTrackStream->getSize() - start_offset) /
-        track->trackInfo.duration;
+                              (currentTrackStream->getSize() - start_offset) /
+                              track->trackInfo.duration;
 #endif
       if (pendingSeekPositionMs > 0) {
         track->requestedPosition = pendingSeekPositionMs;
@@ -252,7 +251,7 @@ void TrackPlayer::runTask() {
       }
 #else
       size_t seekPosition =
-        track->requestedPosition * duration_lambda + start_offset;
+          track->requestedPosition * duration_lambda + start_offset;
       currentTrackStream->seek(seekPosition);
       if (track->requestedPosition > 0)
         skipped = true;
@@ -271,7 +270,7 @@ void TrackPlayer::runTask() {
           VORBIS_SEEK(&vorbisFile, track->requestedPosition);
 #else
           uint32_t seekPosition = track->requestedPosition * duration_lambda +
-            headerSize(tracksPlayed);
+                                  headerSize(tracksPlayed);
           currentTrackStream->seek(seekPosition);
           skipped = true;
 #endif
@@ -283,11 +282,11 @@ void TrackPlayer::runTask() {
 
         long ret =
 #ifdef CONFIG_BELL_NOCODEC
-          this->currentTrackStream->readBytes(&pcmBuffer[0],
-            pcmBuffer.size());
+            this->currentTrackStream->readBytes(&pcmBuffer[0],
+                                                pcmBuffer.size());
 #else
-          VORBIS_READ(&vorbisFile, (char*)&pcmBuffer[0], pcmBuffer.size(),
-            &currentSection);
+            VORBIS_READ(&vorbisFile, (char*)&pcmBuffer[0], pcmBuffer.size(),
+                        &currentSection);
 #endif
 
         if (ret < 0) {
@@ -295,8 +294,7 @@ void TrackPlayer::runTask() {
           currentSongPlaying = false;
           properStream = false;
           eof = true;
-        }
-        else {
+        } else {
           if (ret == 0) {
             eof = true;
           }
@@ -317,7 +315,7 @@ void TrackPlayer::runTask() {
                 }
 #endif
                 written = dataCallback(pcmBuffer.data() + (ret - toWrite),
-                  toWrite, tracksPlayed, skipped);
+                                       toWrite, tracksPlayed, skipped);
               }
               toWrite -= written;
             }
@@ -363,17 +361,17 @@ int TrackPlayer::_vorbisSeek(int64_t offset, int whence) {
     return 0;
   }
   switch (whence) {
-  case 0:
-    this->currentTrackStream->seek(offset);  // Spotify header offset
-    break;
-  case 1:
-    this->currentTrackStream->seek(this->currentTrackStream->getPosition() +
-      offset);
-    break;
-  case 2:
-    this->currentTrackStream->seek(this->currentTrackStream->getSize() +
-      offset);
-    break;
+    case 0:
+      this->currentTrackStream->seek(offset);  // Spotify header offset
+      break;
+    case 1:
+      this->currentTrackStream->seek(this->currentTrackStream->getPosition() +
+                                     offset);
+      break;
+    case 2:
+      this->currentTrackStream->seek(this->currentTrackStream->getSize() +
+                                     offset);
+      break;
   }
 
   return 0;
@@ -388,8 +386,8 @@ long TrackPlayer::_vorbisTell() {
 #endif
 
 void TrackPlayer::setDataCallback(DataCallback callback,
-  SeekableCallback seekable_callback,
-  SeekableCallback spaces_available) {
+                                  SeekableCallback seekable_callback,
+                                  SeekableCallback spaces_available) {
   this->dataCallback = callback;
 #ifdef CONFIG_BELL_NOCODEC
   this->seekable_callback = seekable_callback;

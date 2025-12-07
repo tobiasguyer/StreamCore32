@@ -137,5 +137,6 @@ std::string string_format(const std::string& format, Args... args) {
 std::vector<uint8_t> base64ToBytes(const std::string& b64_in);
 std::string base62FromBytes(const std::vector<uint8_t>& bytesBE);
 
-std::string base62EncodeUri(const std::pair<SpotifyFileType, std::vector<uint8_t>>& in);
+std::string base62EncodeUri(
+    const std::pair<SpotifyFileType, std::vector<uint8_t>>& in);
 #endif

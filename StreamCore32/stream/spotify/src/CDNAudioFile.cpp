@@ -25,8 +25,8 @@
 using namespace spotify;
 
 CDNAudioFile::CDNAudioFile(const std::string& cdnUrl,
-  const std::vector<uint8_t>& audioKey)
-  : cdnUrl(cdnUrl), audioKey(audioKey) {
+                           const std::vector<uint8_t>& audioKey)
+    : cdnUrl(cdnUrl), audioKey(audioKey) {
   this->crypto = std::make_unique<Crypto>();
 }
 
@@ -46,8 +46,8 @@ void CDNAudioFile::seek(size_t newPos) {
 bool CDNAudioFile::openStream() {
   // Open connection, read first 128 bytes
   auto resp = bell::HTTPClient::get(
-    this->cdnUrl,
-    { bell::HTTPClient::RangeHeader::range(0, OPUS_HEADER_SIZE - 1) }, false);
+      this->cdnUrl,
+      {bell::HTTPClient::RangeHeader::range(0, OPUS_HEADER_SIZE - 1)}, false);
   if (!resp->stream().isOpen() || resp->httpCode() != 200) {
     return false;
   }
@@ -56,20 +56,19 @@ bool CDNAudioFile::openStream() {
   if (got != OPUS_HEADER_SIZE) {
     return false;
   }
-  this->totalFileSize =
-    resp->totalLength() - SPOTIFY_OPUS_HEADER;
+  this->totalFileSize = resp->totalLength() - SPOTIFY_OPUS_HEADER;
 
   this->decrypt(header.data(), OPUS_HEADER_SIZE, 0);
 
   // Location must be dividable by 16
   size_t footerStartLocation =
-    (this->totalFileSize - OPUS_FOOTER_PREFFERED + SPOTIFY_OPUS_HEADER) -
-    (this->totalFileSize - OPUS_FOOTER_PREFFERED + SPOTIFY_OPUS_HEADER) % 16;
+      (this->totalFileSize - OPUS_FOOTER_PREFFERED + SPOTIFY_OPUS_HEADER) -
+      (this->totalFileSize - OPUS_FOOTER_PREFFERED + SPOTIFY_OPUS_HEADER) % 16;
 
   this->footer = std::vector<uint8_t>(
-    this->totalFileSize - footerStartLocation + SPOTIFY_OPUS_HEADER);
-  if (!resp->get(
-    cdnUrl, { bell::HTTPClient::RangeHeader::last(footer.size()) }, false)) {
+      this->totalFileSize - footerStartLocation + SPOTIFY_OPUS_HEADER);
+  if (!resp->get(cdnUrl, {bell::HTTPClient::RangeHeader::last(footer.size())},
+                 false)) {
     return false;
   }
 
@@ -96,7 +95,7 @@ size_t CDNAudioFile::readBytes(uint8_t* dst, size_t bytes) {
 
   // // Opus tries to read header, use prefetched data
   if (offsetPosition < OPUS_HEADER_SIZE &&
-    bytes + offsetPosition <= OPUS_HEADER_SIZE) {
+      bytes + offsetPosition <= OPUS_HEADER_SIZE) {
     memcpy(dst, this->header.data() + offsetPosition, bytes);
     position += bytes;
     return bytes;
@@ -112,7 +111,7 @@ size_t CDNAudioFile::readBytes(uint8_t* dst, size_t bytes) {
     }
 
     size_t footerOffset =
-      offsetPosition - (actualFileSize - this->footer.size());
+        offsetPosition - (actualFileSize - this->footer.size());
     memcpy(dst, this->footer.data() + footerOffset, toReadBytes);
 
     position += toReadBytes;
@@ -122,40 +121,42 @@ size_t CDNAudioFile::readBytes(uint8_t* dst, size_t bytes) {
   // Data not in the headers. Make sense of whats going on.
   // Position in bounds :)
   if (offsetPosition >= this->lastRequestPosition &&
-    offsetPosition < this->lastRequestPosition + this->lastRequestCapacity) {
+      offsetPosition < this->lastRequestPosition + this->lastRequestCapacity) {
     size_t toRead = bytes;
 
     if ((toRead + offsetPosition) >
-      this->lastRequestPosition + lastRequestCapacity) {
+        this->lastRequestPosition + lastRequestCapacity) {
       toRead = this->lastRequestPosition + lastRequestCapacity - offsetPosition;
     }
 
     memcpy(dst, this->httpBuffer.data() + offsetPosition - lastRequestPosition,
-      toRead);
+           toRead);
     position += toRead;
 
     return toRead;
-  }
-  else {
-    size_t requestPosition = (offsetPosition)-((offsetPosition) % 16);
+  } else {
+    size_t requestPosition = (offsetPosition) - ((offsetPosition) % 16);
     if (this->enableRequestMargin && requestPosition > SEEK_MARGIN_SIZE) {
       requestPosition = (offsetPosition - SEEK_MARGIN_SIZE) -
-        ((offsetPosition - SEEK_MARGIN_SIZE) % 16);
+                        ((offsetPosition - SEEK_MARGIN_SIZE) % 16);
       this->enableRequestMargin = false;
     }
 
     if (!resp->get(
-      cdnUrl, { bell::HTTPClient::RangeHeader::range(
-                  requestPosition, requestPosition + HTTP_BUFFER_SIZE - 1) }, false)) {
+            cdnUrl,
+            {bell::HTTPClient::RangeHeader::range(
+                requestPosition, requestPosition + HTTP_BUFFER_SIZE - 1)},
+            false)) {
       return 0;
     }
     this->lastRequestPosition = requestPosition;
     this->lastRequestCapacity = resp->contentLength();
 
     size_t readBytes = resp->stream().readExact((char*)this->httpBuffer.data(),
-      lastRequestCapacity);
+                                                lastRequestCapacity);
     resp->stream().close();
-    this->decrypt(this->httpBuffer.data(), readBytes, this->lastRequestPosition);
+    this->decrypt(this->httpBuffer.data(), readBytes,
+                  this->lastRequestPosition);
 
     return readBytes(dst, bytes);
   }
@@ -174,9 +175,10 @@ uint8_t* CDNAudioFile::openStream(ssize_t& header_size) {
 
   // Open connection, fill first buffer
   auto resp = bell::HTTPClient::get(
-    this->cdnUrl,
-    { bell::HTTPClient::RangeHeader::range(0, HTTP_BUFFER_SIZE - 1) }, false);
-  if (!resp->stream().isOpen() || resp->status() < 200 || resp->status() >= 300) {
+      this->cdnUrl,
+      {bell::HTTPClient::RangeHeader::range(0, HTTP_BUFFER_SIZE - 1)}, false);
+  if (!resp->stream().isOpen() || resp->status() < 200 ||
+      resp->status() >= 300) {
     return nullptr;
   }
 
@@ -184,10 +186,9 @@ uint8_t* CDNAudioFile::openStream(ssize_t& header_size) {
   this->lastRequestCapacity = resp->contentLength();
   this->totalFileSize = resp->totalLength();
   size_t got = resp->stream().readExact((char*)this->httpBuffer.data(),
-    lastRequestCapacity);
+                                        lastRequestCapacity);
   resp->stream().close();
-  this->decrypt(this->httpBuffer.data(), got,
-    this->lastRequestPosition);
+  this->decrypt(this->httpBuffer.data(), got, this->lastRequestPosition);
   this->position = getHeader();
   header_size = this->position;
   return &httpBuffer[0];
@@ -233,14 +234,13 @@ long CDNAudioFile::readBytes(uint8_t* dst, size_t bytes) {
   if (position + bytes >= this->totalFileSize) {
     if (position >= this->totalFileSize - 1) {
       return 0;
-    }
-    else {
+    } else {
       SC32_LOG(info, "Truncating read to %d bytes",
-        this->totalFileSize - position);
+               this->totalFileSize - position);
       bytes = this->totalFileSize - position;
     }
   }
-  size_t requestPosition = (position)-((position) % 16);
+  size_t requestPosition = (position) - ((position) % 16);
   bytes = bytes - bytes % 16;
   if (this->enableRequestMargin) {
     if (response) {
@@ -252,9 +252,7 @@ long CDNAudioFile::readBytes(uint8_t* dst, size_t bytes) {
   }
   if (!response || !response->stream().isOpen()) {
     response = bell::HTTPClient::get(
-      cdnUrl,
-      { bell::HTTPClient::RangeHeader::open(requestPosition) }, false
-    );
+        cdnUrl, {bell::HTTPClient::RangeHeader::open(requestPosition)}, false);
   }
   size_t got = response->readExact(dst, bytes);
   if (got != bytes) {

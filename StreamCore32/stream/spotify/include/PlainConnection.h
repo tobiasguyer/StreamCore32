@@ -8,12 +8,12 @@
 #else
 #include <unistd.h>  // for size_t
 #endif
+#include <atomic>
 #include <cstdint>     // for uint8_t
 #include <functional>  // for function
-#include <string>      // for string
-#include <vector>      // for vector
-#include <atomic>
 #include <mutex>
+#include <string>  // for string
+#include <vector>  // for vector
 
 typedef std::function<bool()> timeoutCallback;
 
@@ -41,7 +41,7 @@ class PlainConnection {
 
  private:
   int apSock;
-  std::atomic <bool> isWriting = false;
+  std::atomic<bool> isWriting = false;
   std::mutex writeMutex;
 };
 }  // namespace spotify
