@@ -51,6 +51,7 @@ class QobuzStream : public bell::Task {
     std::string queueSnapshot;
     std::string api_base = "https://www.qobuz.com/api.json/0.2";
     char queue_uuid[37];
+    uint8_t volume = 0;
     uint32_t expiresAt = 0;
     uint64_t rendererId = 0;
     WSToken ws_token;

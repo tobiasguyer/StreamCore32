@@ -42,8 +42,8 @@ class QobuzPlayer : public StreamBase {
     stopTask();
     while (hb_)
       BELL_SLEEP_MS(50);
-    pb_release(qconnect_QueueRendererState_fields, &player_state);
     std::scoped_lock lock(isRunningMutex_);
+    pb_release(qconnect_QueueRendererState_fields, &player_state);
   }
   void runTask() override;
 

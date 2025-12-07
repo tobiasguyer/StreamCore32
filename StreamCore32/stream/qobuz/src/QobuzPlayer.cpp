@@ -478,9 +478,7 @@ void QobuzPlayer::runTask() {
       retries = 0;
   }  // outer while
   feed_->feedCommand(AudioControl::DISC, 0);
-  while (hb_)
-    BELL_SLEEP_MS(100);
-  isRunning_.store(false);
+  isRunning_.store(false)
 }
 
 void QobuzPlayer::sendPlayerState() {

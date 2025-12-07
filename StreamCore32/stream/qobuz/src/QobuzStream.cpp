@@ -151,6 +151,9 @@ void QobuzStream::runTask() {
         } else if (cfg_.XsessionId.expiresAt <= timesync::now_ms() + 60000) {
           startSession();
         }
+        if (cfg_.volume != audioControl_->volume.load()) {
+          WSSetRendererVolume();
+        }
       },
       30000);
   token_hb_->start();
@@ -637,6 +640,9 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
       if (!data->has_srvrCtrlVolumeChanged)
         break;
       if (data->srvrCtrlVolumeChanged.rendererId == cfg_.rendererId) {
+        if (!player_->isRunning())
+          break;
+        cfg_.volume = data->srvrCtrlVolumeChanged.volume;
         player_->feed_->feedCommand(AudioControl::VOLUME_LINEAR,
                                     data->srvrCtrlVolumeChanged.volume,
                                     std::optional<uint32_t>(100)  // max volume
@@ -648,6 +654,7 @@ void QobuzStream::WSDecodeMessage(_qconnect_QConnectMessage* data) {
       if (!data->has_srvrRndrSetVolume)
         break;
       if (player_->isRunning()) {
+        cfg_.volume = data->srvrRndrSetVolume.volume;
         player_->feed_->feedCommand(AudioControl::VOLUME_LINEAR,
                                     data->srvrRndrSetVolume.volume,
                                     std::optional<uint32_t>(100)  // max volume
@@ -797,6 +804,7 @@ void QobuzStream::WSSetRendererVolume() {
   msg.has_messageType = true;
   msg.has_rndrSrvrVolumeChanged = true;
   msg.rndrSrvrVolumeChanged.has_volume = true;
-  msg.rndrSrvrVolumeChanged.volume = player_->audio_->volume.load();
+  msg.rndrSrvrVolumeChanged.volume = audioControl_->volume.load();
+  cfg_.volume = audioControl_->volume.load();
   this->encodeBatches(&msg, 1);
 }

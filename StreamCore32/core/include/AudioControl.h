@@ -109,7 +109,7 @@ class AudioControl {
         case CommandType::VOLUME_LOGARITHMIC: {
           this->audioController->volume.store(
               this->audioSink->to_logarithmic_volume(value));
-          this->audioSink->feed_command([this, value](uint8_t) {
+          this->audioSink->feed_command([this](uint8_t) {
             this->audioSink->set_volume(this->audioController->volume.load());
           });
         } break;
