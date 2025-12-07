@@ -108,7 +108,7 @@ Current functionality (subject to change):
   - Reacts to WebSocket updates from the device
 
 ![player](/StreamCore32/stream/webstream/doc/player.jpg)
-
+[image-source](https://www.pexels.com/de-de/foto/schwarzes-schallplatten-vinyl-167092/)
 - Radio interface
   - Search for radio-stations
   - Save stations to favorites (name and url)
