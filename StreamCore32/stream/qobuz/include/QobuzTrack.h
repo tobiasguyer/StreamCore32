@@ -89,7 +89,6 @@ class QobuzQueueTrack {
   QueuedTrackState state = QueuedTrackState::QUEUED;
 
   // --- New: audio/transport metadata from secure/segmented response ---
-  int format_id = 0;          // e.g. 7, 27
   std::string mime_type;      // e.g. "audio/mp4; codecs=\"flac\""
   int sampling_rate = 0;      // Hz
   int bits_depth = 0;         // 16/24

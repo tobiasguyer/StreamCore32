@@ -114,6 +114,7 @@ class ZeroconfServiceManager {
     std::string key;          // unique id (e.g., "spotify", "qobuz")
     std::string serviceType;  // e.g., "_spotify-connect", "_qobuz-connect"
     std::string proto = "_tcp";
+    int port = 0;
     std::string instanceName;  // default: deviceName()
     std::map<std::string, std::string>
         txt;  // e.g., {"VERSION","1.0"}, {"CPath","/qobuz/display_info"}
@@ -169,7 +170,7 @@ class ZeroconfServiceManager {
         spec.instanceName.empty() ? deviceName_ : spec.instanceName;
     rec.serviceType = spec.serviceType;
     rec.proto = spec.proto;
-    rec.port = serverPort_;
+    rec.port = (spec.port > 0) ? spec.port : serverPort_;
     rec.txtRecords = std::move(txt);
 
     rec.mdns = bell::MDNSService::registerService(rec.instanceName,
