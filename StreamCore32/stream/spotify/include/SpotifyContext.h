@@ -36,6 +36,8 @@ struct Context {
     AudioFormat audioFormat = (AudioFormat)CONFIG_SPOTIFY_AUDIO_FORMAT;
     std::string deviceId;
     std::string deviceName;
+    std::string clientId = CONFIG_SPOTIFY_CLIENT_ID;
+    std::string clientSecret = CONFIG_SPOTIFY_CLIENT_SECRET;
     std::vector<uint8_t> authData;
     std::function<uint16_t()> volume = []() {
       return 0xFFFF;

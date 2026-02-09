@@ -5,7 +5,7 @@ StreamCore32 is a Connect-device implementation for **Qobuz** and **Spotify**, w
 This library is derived from [feelfreelinux/cspot](https://github.com/feelfreelinux/cspot).
 
 > **Note**
-> - Spotify playback requires a **Spotify Premium** account.
+> - Spotify playback requires a **Spotify Premium** account and ClientId and ClientSecret from a SpotifyDeveloper-app.
 > - Qobuz will only play **30 seconds per track** without a paid subscription.
 
 ## Building
@@ -53,7 +53,7 @@ $ idf.py menuconfig
 
 Navigate to `WiFi Configuration` and provide wifi connection details
 
-Navigate to `Spotify Configuration`, you may configure device name and audio quality.
+Navigate to `Spotify Configuration` and provide ClientId and ClientSecret. Furthermore you may configure device name and audio quality.
 
 Navigate to `Audio Sink Configuration`, you may configure the audio sink and further options.
 
@@ -108,6 +108,7 @@ Current functionality (subject to change):
   - Reacts to WebSocket updates from the device
 
 ![player](/StreamCore32/stream/webstream/doc/player.jpg)
+
 [image-source](https://www.pexels.com/de-de/foto/schwarzes-schallplatten-vinyl-167092/)
 - Radio interface
   - Search for radio-stations
@@ -146,4 +147,26 @@ Spotify:
   - played tracks do not show up in “recently played”
   - artists do not get additional “plays” reported from this device
 
+# Spotify Developer Setup
+Currently Spotify has stopped the creation of new spotify-apps. But if, in any time, creation will be allowed again, Step 1 would describe how to create a new App. Until then, try to reach out to a friend with a already craeted App. Access is limited to 5 Accounts.
+
+1) Create a Spotify app (to get Client ID + Secret)
+ - Log in to the Spotify Developer Dashboard and open your Dashboard.
+ - Click Create an App.
+ - Fill in App name and App description, accept the Developer TOS, then click Create.
+
+ 2) To add a tester/user:
+ - In the Developer Dashboard, open your app.
+ - Go to Settings.
+ - Open Users Management (sometimes shown as Users and Access / User Management).
+ - Click Add new user.
+ - Enter the user’s name and the email address associated with their Spotify account.
+
+ 3) Client-Id and -Secret
+ - In the app’s overview/settings, you’ll see your Client ID.
+ - Click View client secret to reveal the Client Secret.
+
+ Reference: [developer.spotify.com - Qouta modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes)
+
+ Special thanks go out to [philippe44](https://github.com/philippe44) for adapting the AccessKeyFetcher to the new Api restrictions.
 

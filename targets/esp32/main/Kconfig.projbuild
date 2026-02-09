@@ -5,8 +5,16 @@ menu "Spotify Configuration"
         default "StreamCore32"
         help
             Define the name of the spotify connect device (will be visible to the client).
-             
-
+    config SPOTIFY_CLIENT_ID
+        string "Spotify Client ID"
+        default ""
+        help
+            Spotify Client ID (obtain your own at https://developer.spotify.com/dashboard/applications)
+    config SPOTIFY_CLIENT_SECRET
+        string "Spotify Client Secret"
+        default ""
+        help
+            Spotify Client Secret (obtain your own at https://developer.spotify.com/dashboard/applications)
     config STREAM_BUFFER_SIZE_RECOMMENDED
         int
         default 81920 if AUDIO_SINK_VS1053

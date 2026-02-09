@@ -160,7 +160,7 @@ DeviceStateHandler::DeviceStateHandler(
                        const std::vector<uint8_t>& auth_data)>
         onLogin,
     std::function<uint16_t()> volume)
-    : bell::Task("spotify_state_handler", 8 * 1024, 0, 1) {
+    : bell::Task("spotify_state_handler", 16 * 1024, 0, 1) {
   handler = this;
   this->ctx = spotify::Context::createFromBlob(blob);
   this->ctx->config.volume = volume;
